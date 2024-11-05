@@ -1,0 +1,188 @@
+---
+title: "name_prediction"
+author: "Shiyu Yang"
+date: "2024-11-05"
+output: html_document
+---
+
+# This is the Step 3 in Data Clean
+Before running code in this file, upload name lists csv files into genderize.io for gender prediction with selecting first name, and in Columns to add select gender and probability. Save the output with the format of prediced_xxx_gender.csv
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(wru)
+```
+
+# Read in Predicted Data
+```{r}
+raw_jocn<- read.csv("predicted_jocn_gender.csv") %>% 
+  janitor::clean_names() %>%
+  select(-x)
+
+raw_nature_neuro<- read.csv("predicted_nature_neuro_gender.csv") %>% 
+  janitor::clean_names() %>%
+  select(-x)
+
+raw_brain<- read.csv("predicted_brain_gender.csv") %>% 
+  janitor::clean_names() %>%
+  select(-x)
+```
+
+```{r}
+# Recode probability under 70% as NA
+jpsp_gender<- raw_jpsp %>%
+  mutate(gender = case_when(
+    gender == "male" & gender_probability < 0.7 ~ NA,
+    gender == "female" & gender_probability < 0.7 ~ NA,
+    gender == 'unknown' ~ NA,
+    TRUE ~ gender
+  )) %>% 
+  select(-gender_probability) %>% 
+  mutate(gender = recode(gender, "female" = "1", "male" = "0"))
+```
+
+```{r}
+raw_race<- read.csv("JoCN_name_list_race.csv") 
+raw_gender<- read.csv("JoCN_name_list_gender.csv") %>% janitor::clean_names()
+
+data <- raw_race %>% 
+  select(full_name, last_name, max_race) %>% 
+  rename(race = max_race) %>% 
+   mutate(race = if_else(str_detect(last_name, regex("^Van |^di |^Le ", ignore_case = TRUE)), "white", race)) %>% 
+  glimpse()
+
+gender_data<- raw_gender %>%
+  mutate(gender = case_when(
+    gender == "male" & gender_probability < 0.7 ~ NA,
+    gender == "female" & gender_probability < 0.7 ~ NA,
+    gender == 'unknown' ~ NA,
+    TRUE ~ gender
+  )) %>% 
+  select(-gender_probability,-last_name, -first_name)
+
+gender_data <- gender_data %>%
+  mutate(gender = recode(gender, "female" = "f", "male" = "m"))
+
+#missing_race<- data %>% filter(race == "unknown")
+#missing_race1 <- missing_race %>%  slice(1:500)
+#missing_race2 <- missing_race %>%  slice(501:1000)
+#missing_race3 <- missing_race %>%  slice(1001:1500)
+#missing_race4 <- missing_race %>%  slice(1501:2000)
+#missing_race5 <- missing_race %>%  slice(2001:2500)
+#missing_race6 <- missing_race %>%  slice(2501:2897)
+#write.csv(missing_race1, file = "missing_race1.csv", row.names = FALSE)
+#write.csv(missing_race2, file = "missing_race2.csv", row.names = FALSE)
+#write.csv(missing_race3, file = "missing_race3.csv", row.names = FALSE)
+#write.csv(missing_race4, file = "missing_race4.csv", row.names = FALSE)
+#write.csv(missing_race5, file = "missing_race5.csv", row.names = FALSE)
+#write.csv(missing_race6, file = "missing_race6 .csv", row.names = FALSE)
+```
+
+# Read in Manual Labeled Data
+```{r}
+labeled_data1<- read.csv("missing_race1.csv")
+labeled_data2<- read.csv("missing_race2.csv")
+labeled_data3<- read.csv("missing_race3.csv")
+labeled_data4<- read.csv("missing_race4.csv")
+labeled_data5<- read.csv("missing_race5.csv")
+labeled_data6<- read.csv("missing_race6.csv")
+labeled_data <- bind_rows(labeled_data1, labeled_data2, labeled_data3, 
+                          labeled_data4, labeled_data5, labeled_data6) %>% 
+  mutate(gender = case_when(
+    gender == '' ~ NA,
+    TRUE ~ gender
+  )) %>% 
+  select(-race,-last_name)%>% 
+  glimpse()
+
+new_labeled_data <- gender_data %>%
+  left_join(labeled_data, by = "full_name", suffix = c("_predicted", "_true"))
+
+new_labeled_data <- new_labeled_data %>%
+  mutate(gender = ifelse(!is.na(gender_true), gender_true, gender_predicted)) %>% 
+  select(-gender_predicted,-gender_true)
+
+new_labeled_data <- new_labeled_data %>%
+  left_join(labeled_data %>% select(full_name, bipoc), by = "full_name", suffix = c("", "_original")) %>%
+  mutate(bipoc = ifelse(is.na(bipoc), bipoc_original, bipoc)) %>%
+  select(-bipoc_original)
+
+ missing_gender_list <- new_labeled_data %>%filter(is.na(gender))
+#  Total of 298 missing gender
+#  missing_gender1 <- missing_gender_list %>%  slice(1:150)
+#  missing_gender2 <- missing_gender_list %>%  slice(151:298)
+#  write.csv(missing_gender1, "missing_gender1.csv", row.names = FALSE)
+#  write.csv(missing_gender2, "missing_gender2.csv", row.names = FALSE)
+
+labeled_data_1<- read.csv("missing_gender1.csv")
+labeled_data_2<- read.csv("missing_gender2.csv")
+labeled_data_full <- bind_rows(labeled_data_1, labeled_data_2) %>% 
+  select(-bipoc)
+
+new_labeled_data <- new_labeled_data %>%
+  rename(gender_predicted = gender)
+
+labeled_data_full <- labeled_data_full %>%
+  rename(gender_true = gender) 
+
+new_labeled_data <- new_labeled_data %>%
+  left_join(labeled_data_full, by = "full_name")
+
+new_labeled_data <- new_labeled_data %>%
+  mutate(
+    gender = ifelse(!is.na(gender_true), gender_true, gender_predicted)) %>%
+  select(-gender_predicted, -gender_true)
+```
+
+# Merge race and gender with data
+```{r}
+merged_data <- data %>%
+  left_join(new_labeled_data, by = "full_name") %>% 
+  mutate(bipoc = coalesce(bipoc, if_else(race %in% c("asian", "hispanic", "black"), 1, 0))) %>%
+  select(full_name, last_name, bipoc,gender)%>% 
+  glimpse()
+
+write.csv(merged_data, file = "cleaned_predicted_data.csv", row.names = FALSE)
+```
+
+
+### Brain
+
+# Read in Predicted Data in Brain
+```{r}
+raw_race<- read.csv("JoCN_name_list_race.csv") 
+raw_gender<- read.csv("JoCN_name_list_gender.csv") %>% janitor::clean_names()
+
+data <- raw_race %>% 
+  select(full_name, last_name, max_race) %>% 
+  rename(race = max_race) %>% 
+   mutate(race = if_else(str_detect(last_name, regex("^Van |^di |^Le ", ignore_case = TRUE)), "white", race)) %>% 
+  glimpse()
+
+gender_data<- raw_gender %>%
+  mutate(gender = case_when(
+    gender == "male" & gender_probability < 0.7 ~ NA,
+    gender == "female" & gender_probability < 0.7 ~ NA,
+    gender == 'unknown' ~ NA,
+    TRUE ~ gender
+  )) %>% 
+  select(-gender_probability,-last_name, -first_name)
+
+gender_data <- gender_data %>%
+  mutate(gender = recode(gender, "female" = "f", "male" = "m"))
+
+#missing_race<- data %>% filter(race == "unknown")
+#missing_race1 <- missing_race %>%  slice(1:500)
+#missing_race2 <- missing_race %>%  slice(501:1000)
+#missing_race3 <- missing_race %>%  slice(1001:1500)
+#missing_race4 <- missing_race %>%  slice(1501:2000)
+#missing_race5 <- missing_race %>%  slice(2001:2500)
+#missing_race6 <- missing_race %>%  slice(2501:2897)
+#write.csv(missing_race1, file = "missing_race1.csv", row.names = FALSE)
+#write.csv(missing_race2, file = "missing_race2.csv", row.names = FALSE)
+#write.csv(missing_race3, file = "missing_race3.csv", row.names = FALSE)
+#write.csv(missing_race4, file = "missing_race4.csv", row.names = FALSE)
+#write.csv(missing_race5, file = "missing_race5.csv", row.names = FALSE)
+#write.csv(missing_race6, file = "missing_race6 .csv", row.names = FALSE)
+```
+

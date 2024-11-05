@@ -1,0 +1,100 @@
+---
+title: "author_clean"
+author: "Shiyu Yang"
+date: "2024-11-05"
+output: html_document
+---
+
+# This is the step 2 in Data Clean
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+# Read data
+```{r}
+brain<- read.csv("raw_author_brain.csv")
+nature_neuro<- read.csv("raw_author_nature_neuro.csv")
+jocn<- read.csv("raw_author_jocn.csv")
+```
+
+# Data clean
+```{r}
+# Brain clean
+cleaned_brain <- brain %>%
+  mutate(full_name = author_full_names) %>% 
+  separate(author_full_names, into = c("part1", "part2", "part3"), sep = ",", fill = "right") %>%
+  mutate(part2 = str_replace(part2, "\\s+[A-Z]\\.\\s*", " ")) %>% 
+  mutate(part2 = str_replace(part2, "\\s+[A-Z]\\.\\s*", " ")) %>% 
+  mutate(part2 = str_replace(part2, "\\s+[A-Z]\\.\\s*", " ")) %>% 
+  mutate(part2 = str_replace(part2, "(?<!-)\\s+-\\s+(?![A-Z])", " ")) %>%
+  mutate(part2 = str_trim(part2)) %>%
+  mutate(last_name = str_trim(part1),
+         first_name = str_trim(part2))
+
+# Due to abbreviation in some author name, 735 names with duplication will be removed in the dataset
+sum(is.na(cleaned_brain$first_name) | cleaned_brain$first_name == "")
+cleaned_brain <- cleaned_brain[!(is.na(cleaned_brain$first_name) | cleaned_brain$first_name == ""), ]
+
+# Create name list from Brain
+cleaned_brain <- cleaned_brain%>% 
+  distinct(full_name, first_name, last_name) %>% 
+  write.csv("brain_name_list.csv")
+```
+
+```{r}
+# Nature Neuroscience clean
+cleaned_nature_neuro<- nature_neuro %>%
+  mutate(full_name = author_full_names) %>% 
+  separate(author_full_names, into = c("part1", "part2", "part3"), sep = ",", fill = "right") %>%
+  mutate(part2 = str_replace(part2, "\\s+[A-Z]\\.\\s*", " ")) %>% 
+  mutate(part2 = str_replace(part2, "\\s+[A-Z]\\.\\s*", " ")) %>% 
+  mutate(part2 = str_replace(part2, "\\s+[A-Z]\\.\\s*", " ")) %>% 
+  mutate(part2 = str_replace(part2, "(?<!-)\\s+-\\s+(?![A-Z])", " ")) %>%
+  mutate(part2 = str_trim(part2)) %>%
+  mutate(last_name = str_trim(part1),
+         first_name = str_trim(part2))
+
+# Due to abbreviation in some author name, 99 names with duplication will be removed in the dataset
+sum(is.na(cleaned_nature_neuro$first_name) | cleaned_nature_neuro$first_name == "")
+cleaned_nature_neuro <- cleaned_nature_neuro[!(is.na(cleaned_nature_neuro$first_name) | cleaned_nature_neuro$first_name == ""), ]
+
+# Create name list from Brain
+cleaned_nature_neuro <- cleaned_nature_neuro %>% 
+  distinct(full_name, first_name, last_name) %>% 
+  write.csv("nature_neuro_name_list.csv")
+```
+
+```{r}
+# JoCN clean
+cleaned_jocn<- jocn %>%
+  mutate(full_name = author_full_names) %>% 
+  separate(author_full_names, into = c("part1", "part2", "part3"), sep = ",", fill = "right") %>%
+  mutate(part2 = str_replace(part2, "\\s+[A-Z]\\.\\s*", " ")) %>% 
+  mutate(part2 = str_replace(part2, "\\s+[A-Z]\\.\\s*", " ")) %>% 
+  mutate(part2 = str_replace(part2, "\\s+[A-Z]\\.\\s*", " ")) %>% 
+  mutate(part2 = str_replace(part2, "(?<!-)\\s+-\\s+(?![A-Z])", " ")) %>%
+  mutate(part2 = str_trim(part2)) %>%
+  mutate(last_name = str_trim(part1),
+         first_name = str_trim(part2))
+
+# Due to abbreviation in some author name, ?? names with duplication will be removed in the dataset
+sum(is.na(cleaned_jocn$first_name) | cleaned_jocn$first_name == "")
+cleaned_jocn <- cleaned_jocn[!(is.na(cleaned_jocn$first_name) | cleaned_jocn$first_name == ""), ]
+
+# Manually clean
+cleaned_jocn <- cleaned_jocn %>%
+  mutate(first_name = case_when(
+    first_name  == "Dominique J-F" ~ "Dominique",
+    first_name  == "-Marsel" ~ "Marsel",
+    first_name  == "-Xavier" ~ "Xavier",
+    first_name  == "-L. Sharon" ~ "Sharon",
+    TRUE ~ first_name  
+  )) 
+
+# Create name list from JoCN
+cleaned_jocn <- cleaned_jocn %>% 
+  distinct(full_name, first_name, last_name) %>% 
+  write.csv("jocn_name_list.csv")
+```
+

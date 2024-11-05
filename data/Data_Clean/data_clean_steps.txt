@@ -1,0 +1,7 @@
+This file is for explaining and direction to complete data cleaning.
+
+Step 1. Open journals_clean.Rmd to clean each journal data in csv format, and also obtained author level data. In this case, we had three journal data and ended up with 6 datasets.
+
+Step 2. Open author_clean.Rmd to clean author data from step1 and generate name lists for each journal. In this case, we had 3 new dataset.
+
+Step3. 

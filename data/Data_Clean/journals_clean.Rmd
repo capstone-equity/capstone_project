@@ -1,0 +1,108 @@
+---
+title: "journal_clean"
+author: "Shiyu Yang"
+date: "2024-11-05"
+output: html_document
+---
+##### Data Cleaning ######
+# This RMD file is made for first step in data cleaning: 
+# 1) selecting columns
+# 2) filtering publications
+# 3) generate author level data
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+## Read Datasets
+```{r}
+#raw_jocn <- read_csv("jocn.csv") %>% janitor::clean_names() 
+raw_nature_neuro <- read_csv("Nature_Neuroscience.csv") 
+raw_brain <- read_csv("Brain.csv")
+```
+
+## Data Clean
+```{r}
+# Brain clean end with 4249 publications
+brain<- raw_brain %>% 
+  select(AF, TI, DT, RP, FU, TC,CR, PY, DI) %>% 
+    mutate(author_full_names = str_trim(AF),
+           article_title = TI,
+           document_type = DT,
+           reprint_addresses = RP,
+           funding_orgs = FU,
+           cited_references = CR,
+           cited_count = TC,
+           publication_year = PY,
+           doi = DI) %>% 
+  select(author_full_names, article_title, document_type, 
+         reprint_addresses, funding_orgs, cited_references, cited_count,
+         publication_year, doi) %>% 
+  mutate(publication_year =  as.numeric(publication_year))%>% 
+  filter(publication_year >= 2009) 
+
+# Author level data
+brain_author<- brain %>%
+  separate_rows(author_full_names, sep = ";") %>%
+  mutate(author_full_names = str_trim(author_full_names)) 
+
+#write.csv(brain, file = "cleaned_brain.csv", row.names = FALSE)
+#write.csv(brain_author, file = "raw_author_brain.csv", row.names = FALSE)
+```
+
+```{r}
+# Nature Neuroscience clean end with 2980 publications
+nature_neuro<- raw_nature_neuro %>% 
+  select(AF, TI, DT, RP, FU, TC,CR, PY, DI) %>% 
+    mutate(author_full_names = str_trim(AF),
+           article_title = TI,
+           document_type = DT,
+           reprint_addresses = RP,
+           funding_orgs = FU,
+           cited_references = CR,
+           cited_count = TC,
+           publication_year = PY,
+           doi = DI) %>% 
+  select(author_full_names, article_title, document_type, 
+         reprint_addresses, funding_orgs, cited_references, cited_count,
+         publication_year, doi) %>% 
+  mutate(publication_year =  as.numeric(publication_year))%>% 
+  filter(publication_year >= 2009) 
+
+# Author level data
+nature_neuro_author<- nature_neuro %>%
+  separate_rows(author_full_names, sep = ";") %>%
+  mutate(author_full_names = str_trim(author_full_names)) 
+
+#write.csv(nature_neuro, file = "cleaned_nature_neuro.csv", row.names = FALSE)
+#write.csv(nature_neuro_author, file = "raw_author_nature_neuro.csv", row.names = FALSE)
+```
+
+```{r}
+# Brain clean end with 4249 publications
+jocn<- raw_jocn %>% 
+  select(AF, TI, DT, RP, FU, TC,CR, PY, DI) %>% 
+    mutate(author_full_names = str_trim(AF),
+           article_title = TI,
+           document_type = DT,
+           reprint_addresses = RP,
+           funding_orgs = FU,
+           cited_references = CR,
+           cited_count = TC,
+           publication_year = PY,
+           doi = DI) %>% 
+  select(author_full_names, article_title, document_type, 
+         reprint_addresses, funding_orgs, cited_references, cited_count,
+         publication_year, doi) %>% 
+  mutate(publication_year =  as.numeric(publication_year))%>% 
+  filter(publication_year >= 2009) 
+
+# Author level data
+jocn_author<- jocn %>%
+  separate_rows(author_full_names, sep = ";") %>%
+  mutate(author_full_names = str_trim(author_full_names)) 
+
+#write.csv(jocn, file = "cleaned_jocn.csv", row.names = FALSE)
+#write.csv(jocn_author, file = "raw_author_jocn.csv", row.names = FALSE)
+```

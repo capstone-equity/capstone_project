@@ -80,7 +80,6 @@ nature_neuro_author<- nature_neuro %>%
 ```
 
 ```{r}
-# Brain clean end with 4249 publications
 jocn<- raw_jocn %>% 
   select(AF, TI, DT, RP, FU, TC,CR, PY, DI) %>% 
     mutate(author_full_names = str_trim(AF),

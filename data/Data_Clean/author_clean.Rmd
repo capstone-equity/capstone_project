@@ -97,4 +97,37 @@ cleaned_jocn <- cleaned_jocn %>%
   distinct(full_name, first_name, last_name) %>% 
   write.csv("jocn_name_list.csv")
 ```
+# Merge datasets
+```{r}
+data<- jocn %>% 
+  bind_rows(nature_neuro)%>% 
+  bind_rows(brain)%>%
+  filter(!is.na(reprint_addresses)) %>%   
+  filter(reprint_addresses!="") %>% 
+  glimpse()
+```
+# Merge race and gender
+```{r}
+name_data<- read.csv("updating_name_value.csv") %>% 
+  rename(author_full_names = full_name) %>% 
+    mutate(gender = as.factor(gender),
+           bipoc  = as.factor(bipoc))  %>% 
+  mutate(gender = recode(gender, "m" = "0", "f" = "1"))
 
+merged_data <- data %>%
+  left_join(name_data, by = "author_full_names") %>% 
+  distinct()
+```
+# Mixed gender and race
+```{r}
+summary_data <- merged_data %>%
+  group_by(doi) %>%
+  mutate(all_men = ifelse(all(gender == "0"), 1, 0),
+         all_women = ifelse(all(gender == "1"), 1, 0),
+         all_white = ifelse(all(bipoc == "0"), 1, 0),
+         all_bipoc = ifelse(all(bipoc == "1"), 1, 0))
+```
+
+```{r}
+write.csv(summary_data, file = "updating_gender_bipoc_data.csv", row.names = FALSE)
+```

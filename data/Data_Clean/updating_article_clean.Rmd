@@ -14,7 +14,7 @@ library(tidyverse)
 
 # Read data
 ```{r}
-# 4,262 publications in JoCN
+# 2,721 publications in JoCN
 raw_jocn <- read.csv("cleaned_jocn.csv") %>% 
   mutate(journal = "jocn") 
 
@@ -33,15 +33,14 @@ raw_data<- raw_jocn %>%
   filter(!is.na(reprint_addresses)) %>%   
   filter(reprint_addresses!="") %>% 
   glimpse()
-  glimpse()
 
 # Removed raw datasets
 rm(raw_jocn)
 rm(raw_nature_neuroscience)
 rm(raw_brain)
 
-# Total of 9,959 publications
-#write.csv(data, file = "updating_raw_article_data.csv", row.names = FALSE)
+# Total of 9,927 publications
+#write.csv(raw_data, file = "updating_raw_article_data.csv", row.names = FALSE)
 ```
 
 # Prepare for affiliation category
@@ -152,9 +151,9 @@ developed_eco <- c(
 ```
 
 
-# Extract author, fund, and affliation information from data
+# Data wrangling on variables
 ```{r}
-cleaned_data<- data %>% 
+cleaned_data<- raw_data %>% 
   mutate(corresponding_author = str_extract(reprint_addresses, "^[^,]+"),
          first_author = str_extract(author_full_names, "^[^;]+"),
          last_author = str_extract(author_full_names, "[^;]+$"),
@@ -183,8 +182,10 @@ cleaned_data<- data %>%
          corresponding_author = str_to_lower(corresponding_author))
          
 cleaned_data$affiliation_dev[is.na(cleaned_data$affiliation_dev)] <- 0
+```
 
-
+# Data clean on gender and bipoc info
+```{r}
 # Merged gender and BIPOC info of author
 names<- read.csv("jocn_name_list.csv") 
 
@@ -233,13 +234,13 @@ adjusted_data <- merged_data %>%
 both_match_rows <- adjusted_data %>%
   filter(both_match)
 
-# Total of 34 articles has the same last name for both first and last author
+# Total of 31 articles has the same last name for both first and last author
 
 # Check corresponding author is not either first author or last author
 none_match_rows <- adjusted_data %>%
   filter(none_match)
 
-# Total of 673 rows returned, however some of them were due to the format of name. I will manually correct the name for those author.
+# Total of 812 rows returned, however some of them were due to the format of name. I will manually correct the name for those author.
 # Additionally 20 author was not matched due to single author
 
 manual_clean_data <- adjusted_data %>%
@@ -1028,7 +1029,120 @@ manual_clean_data <- adjusted_data %>%
          corresponding_author = ifelse(doi == "10.1093/brain/awt221", "Shalchi, Zaid", corresponding_author),
          corresponding_author = ifelse(doi == "10.1093/brain/awp290", "Schachner, Melitta", corresponding_author),
          corresponding_author = ifelse(doi == "10.1093/brain/awp030", "Raisman, Geoffrey", corresponding_author),
-         corresponding_author = ifelse(doi == "10.1093/brain/awn318", "Al-Shahi Salman, Rustam", corresponding_author))
+         corresponding_author = ifelse(doi == "10.1093/brain/awn318", "Al-Shahi Salman, Rustam", corresponding_author),
+
+         corresponding_author = ifelse(doi == "10.1093/brain/awv266", "Abe, Christoph", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1038/nn.3951", "Acsady, Laszlo", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/aws196", "Baeckman, Cristina M.", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/awaa450", "Berenyi, Antal", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/aws349", "Bejot, Yannick", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/awq215", "Bluemcke, Ingmar", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/awt284", "Boennemann, Carsten G.", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/awn325", "Boennemann, Carsten G.", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/awu368", "Boennemann, Carsten G.", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1038/s41593-023-01323-6", "Boillee, Severine", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1038/s41593-020-00718-z", "Boillee, Severine", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/awu312", "Boillee, Severine", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/awaa158", "Brueck, Wolfgang", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1038/s41593-021-00854-0", "Bruening, Jens C.", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1038/nn.2847", "Bruening, Jens C.", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1038/nn.3449", "Bruening, Jens C.", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1038/nn.3583", "Bruestle, Oliver", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1038/s41593-018-0290-2", "Boettcher, Chotima", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1038/s41593-024-01633-3", "Burguiere, Eric", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1038/nn.3905", "Buzsaki, Gyoergy", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1038/nn.3304", "Buzsaki, Gyoergy", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1038/nn.2894", "Buzsaki, Gyoergy", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1038/s41593-023-01270-2", "Buzsaki, Gyoergy", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1038/nn.3968", "Buzsaki, Gyoergy", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1038/nn.4543", "Buzsaki, Gyoergy", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1038/nn.4637", "Buzsaki, Gyoergy", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1038/nn.3952", "Buzsaki, Gyoergy", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1038/s41593-021-00797-6", "Buzsaki, Gyoergy", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/awab076", "Calo, Laura", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1038/s41593-019-0354-y", "Carlen, Marie", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/aws134", "Chabardes, Stephan", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/awr366", "Chio, Adriano", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/awq383", "Chetelat, Gael", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/awq187", "Chetelat, Gael", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/awx279", "Chetelat, Gael", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/awp132", "Chetelat, Gael", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/aww159", "Chetelat, Gael", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/awq203", "Chetelat, Gael", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/awab301", "Diaz-Manera, Jordi", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/awaa228", "Diaz-Manera, Jordi", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1038/nn.4243", "Deneve, Sophie", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/awac384", "Diez-Cirarda, Maria", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/awv408", "Dorothee, Guillaume", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/awab405", "Duezel, Emrah", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1038/s41593-018-0301-3", "Ertuerk, Ali", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/awv311", "Espinos, Carmen", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1038/nn.2437", "Farinas, Isabel", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/aww002", "Floeel, Agnes", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/awq135", "Fluegel, Alexander", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1038/nn.3706", "Frisen, Jonas", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1038/nn.2268", "Frisen, Jonas", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/awq241", "Frisen, Jonas", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/awae041", "Garcia-Cazorla, Angeles", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/awad010", "Garcia-Cazorla, Angeles", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/awt171", "Gomez-Isla, Teresa", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1038/nn.4616", "Gonzalez-Maeso, Javier", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1038/nn.3181", "Gonzalez-Maeso, Javier", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1038/s41593-021-00856-y", "Graeff, Johannes", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/awac464", "Gruenewald, Anne", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/awu213", "Grueninger, Fiona", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1038/nn.3371", "Goetz, Magdalena", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1038/nn.2399", "Goetz, Magdalena", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/awt348", "Gulyas, Attila I.", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/awq278", "Guzman, Manuel", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/awac276", "Goevert, Felix", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/awv246", "Harle, Katia M.", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/awx039", "Huebener-Schmid, Jeannette", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1038/s41593-022-01217-z", "Hadinger, Nora", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author),
+         corresponding_author = ifelse(doi == "", "", corresponding_author))
 ```
 
 

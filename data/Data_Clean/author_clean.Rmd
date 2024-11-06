@@ -78,7 +78,7 @@ cleaned_jocn<- jocn %>%
   mutate(last_name = str_trim(part1),
          first_name = str_trim(part2))
 
-# Due to abbreviation in some author name, ?? names with duplication will be removed in the dataset
+# Due to abbreviation in some author name, 15 names with duplication will be removed in the dataset
 sum(is.na(cleaned_jocn$first_name) | cleaned_jocn$first_name == "")
 cleaned_jocn <- cleaned_jocn[!(is.na(cleaned_jocn$first_name) | cleaned_jocn$first_name == ""), ]
 

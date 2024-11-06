@@ -17,7 +17,7 @@ library(tidyverse)
 
 ## Read Datasets
 ```{r}
-#raw_jocn <- read_csv("jocn.csv") %>% janitor::clean_names() 
+raw_jocn <- read_csv("JoCN.csv")
 raw_nature_neuro <- read_csv("Nature_Neuroscience.csv") 
 raw_brain <- read_csv("Brain.csv")
 ```
@@ -80,6 +80,8 @@ nature_neuro_author<- nature_neuro %>%
 ```
 
 ```{r}
+# JoCN clean end with 2721 publications
+
 jocn<- raw_jocn %>% 
   select(AF, TI, DT, RP, FU, TC,CR, PY, DI) %>% 
     mutate(author_full_names = str_trim(AF),

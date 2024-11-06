@@ -4,4 +4,5 @@ Step 1. Open journals_clean.Rmd to clean each journal data in csv format, and al
 
 Step 2. Open author_clean.Rmd to clean author data from step1 and generate name lists for each journal. In this case, we had 3 new dataset.
 
-Step3. 
+Step 3. Open name_prediction.Rmd to use genderized.io and wru to predict gender based on first name and predict race based on last name. Additional steps involved such as upload csv file to genderized.io and manual label missing values. 
+* Search full name of author and find their personal websites or lab websites. If pronouns are specified, use the relative gender label. If not provide, use picture to make prediction on gender and race. No picture online available coded as NA. After all clean, end with updating_name_value.csv.

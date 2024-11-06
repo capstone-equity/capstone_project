@@ -13,7 +13,7 @@ library(tidyverse)
 library(wru)
 ```
 
-# Read in Predicted Data
+# Read in Predicted Data in gender
 ```{r}
 raw_jocn<- read.csv("predicted_jocn_gender.csv") %>% 
   janitor::clean_names() %>%
@@ -26,11 +26,43 @@ raw_nature_neuro<- read.csv("predicted_nature_neuro_gender.csv") %>%
 raw_brain<- read.csv("predicted_brain_gender.csv") %>% 
   janitor::clean_names() %>%
   select(-x)
+
+jocn<- read.csv("jocn_name_list.csv") %>% 
+  janitor::clean_names() %>%
+  select(-x)
+
+nature_neuro<- read.csv("nature_neuro_name_list.csv") %>% 
+  janitor::clean_names() %>%
+  select(-x)
+
+brain<- read.csv("brain_name_list.csv") %>% 
+  janitor::clean_names() %>%
+  select(-x)
 ```
 
+# Recode gender probability with threshold of .7
 ```{r}
-# Recode probability under 70% as NA
-jpsp_gender<- raw_jpsp %>%
+jocn_gender<- raw_jocn %>%
+  mutate(gender = case_when(
+    gender == "male" & gender_probability < 0.7 ~ NA,
+    gender == "female" & gender_probability < 0.7 ~ NA,
+    gender == 'unknown' ~ NA,
+    TRUE ~ gender
+  )) %>% 
+  select(-gender_probability) %>% 
+  mutate(gender = recode(gender, "female" = "1", "male" = "0"))
+
+nature_neuro_gender<- raw_nature_neuro %>%
+  mutate(gender = case_when(
+    gender == "male" & gender_probability < 0.7 ~ NA,
+    gender == "female" & gender_probability < 0.7 ~ NA,
+    gender == 'unknown' ~ NA,
+    TRUE ~ gender
+  )) %>% 
+  select(-gender_probability) %>% 
+  mutate(gender = recode(gender, "female" = "1", "male" = "0"))
+
+brain_gender<- raw_brain %>%
   mutate(gender = case_when(
     gender == "male" & gender_probability < 0.7 ~ NA,
     gender == "female" & gender_probability < 0.7 ~ NA,
@@ -41,148 +73,273 @@ jpsp_gender<- raw_jpsp %>%
   mutate(gender = recode(gender, "female" = "1", "male" = "0"))
 ```
 
+# Predict race based on last name and merge with gender data
 ```{r}
-raw_race<- read.csv("JoCN_name_list_race.csv") 
-raw_gender<- read.csv("JoCN_name_list_gender.csv") %>% janitor::clean_names()
+jocn <- jocn %>% rename(surname = last_name)
 
-data <- raw_race %>% 
-  select(full_name, last_name, max_race) %>% 
-  rename(race = max_race) %>% 
-   mutate(race = if_else(str_detect(last_name, regex("^Van |^di |^Le ", ignore_case = TRUE)), "white", race)) %>% 
-  glimpse()
+# Predict race
+race_jocn <- predict_race(raw_jocn, surname.only = TRUE)
 
-gender_data<- raw_gender %>%
-  mutate(gender = case_when(
-    gender == "male" & gender_probability < 0.7 ~ NA,
-    gender == "female" & gender_probability < 0.7 ~ NA,
-    gender == 'unknown' ~ NA,
-    TRUE ~ gender
+# Recode probability under 70% as NA
+predicted_jocn <- race_jocn %>%
+  mutate(max_race = case_when(
+    pmax(pred.whi, pred.bla, pred.his, pred.asi, pred.oth) < 0.7 ~ "unknown",
+    pred.whi == pmax(pred.whi, pred.bla, pred.his, pred.asi, pred.oth) ~ "white",
+    pred.bla == pmax(pred.whi, pred.bla, pred.his, pred.asi, pred.oth) ~ "black",
+    pred.his == pmax(pred.whi, pred.bla, pred.his, pred.asi, pred.oth) ~ "hispanic",
+    pred.asi == pmax(pred.whi, pred.bla, pred.his, pred.asi, pred.oth) ~ "asian",
+    pred.oth == pmax(pred.whi, pred.bla, pred.his, pred.asi, pred.oth) ~ "unknown"
   )) %>% 
-  select(-gender_probability,-last_name, -first_name)
+  rename(last_name = surname)
 
-gender_data <- gender_data %>%
-  mutate(gender = recode(gender, "female" = "f", "male" = "m"))
+# Recode White as 0, BIPOC as 1
+predicted_jocn$bipoc <- ifelse(predicted_jocn$max_race %in% c("hispanic", "black", "asian"), 1,
+                        ifelse(predicted_jocn$max_race == "white", 0, NA)) 
 
-#missing_race<- data %>% filter(race == "unknown")
-#missing_race1 <- missing_race %>%  slice(1:500)
-#missing_race2 <- missing_race %>%  slice(501:1000)
-#missing_race3 <- missing_race %>%  slice(1001:1500)
-#missing_race4 <- missing_race %>%  slice(1501:2000)
-#missing_race5 <- missing_race %>%  slice(2001:2500)
-#missing_race6 <- missing_race %>%  slice(2501:2897)
-#write.csv(missing_race1, file = "missing_race1.csv", row.names = FALSE)
-#write.csv(missing_race2, file = "missing_race2.csv", row.names = FALSE)
-#write.csv(missing_race3, file = "missing_race3.csv", row.names = FALSE)
-#write.csv(missing_race4, file = "missing_race4.csv", row.names = FALSE)
-#write.csv(missing_race5, file = "missing_race5.csv", row.names = FALSE)
-#write.csv(missing_race6, file = "missing_race6 .csv", row.names = FALSE)
+# Remove unnecessary columns
+predicted_jocn <-predicted_jocn %>% 
+  select(-pred.whi, -pred.bla, -pred.his, -pred.asi, -pred.oth, -max_race) %>%
+  left_join(jocn_gender, by = "first_name")%>% 
+  mutate(bipoc = as.character(bipoc))
+
+nature_neuro <- nature_neuro %>% rename(surname = last_name)
+
+# Predict race
+race_nature_neuro <- predict_race(nature_neuro, surname.only = TRUE)
+
+# Recode probability under 70% as NA
+predicted_nature_neuro <- race_nature_neuro %>%
+  mutate(max_race = case_when(
+    pmax(pred.whi, pred.bla, pred.his, pred.asi, pred.oth) < 0.7 ~ "unknown",
+    pred.whi == pmax(pred.whi, pred.bla, pred.his, pred.asi, pred.oth) ~ "white",
+    pred.bla == pmax(pred.whi, pred.bla, pred.his, pred.asi, pred.oth) ~ "black",
+    pred.his == pmax(pred.whi, pred.bla, pred.his, pred.asi, pred.oth) ~ "hispanic",
+    pred.asi == pmax(pred.whi, pred.bla, pred.his, pred.asi, pred.oth) ~ "asian",
+    pred.oth == pmax(pred.whi, pred.bla, pred.his, pred.asi, pred.oth) ~ "unknown"
+  )) %>% 
+  rename(last_name = surname)
+
+# Recode White as 0, BIPOC as 1
+predicted_nature_neuro$bipoc <- ifelse(predicted_nature_neuro$max_race %in% c("hispanic", "black", "asian"), 1,
+                        ifelse(predicted_nature_neuro$max_race == "white", 0, NA)) 
+
+# Remove unnecessary columns
+predicted_nature_neuro <-predicted_nature_neuro %>% 
+  select(-pred.whi, -pred.bla, -pred.his, -pred.asi, -pred.oth, -max_race) %>%
+  left_join(nature_neuro_gender, by = "first_name") %>% 
+  mutate(bipoc = as.character(bipoc))
+
+brain <- brain %>% rename(surname = last_name)
+
+# Predict race
+race_brain <- predict_race(brain, surname.only = TRUE)
+
+# Recode probability under 70% as NA
+predicted_brain <- race_brain %>%
+  mutate(max_race = case_when(
+    pmax(pred.whi, pred.bla, pred.his, pred.asi, pred.oth) < 0.7 ~ "unknown",
+    pred.whi == pmax(pred.whi, pred.bla, pred.his, pred.asi, pred.oth) ~ "white",
+    pred.bla == pmax(pred.whi, pred.bla, pred.his, pred.asi, pred.oth) ~ "black",
+    pred.his == pmax(pred.whi, pred.bla, pred.his, pred.asi, pred.oth) ~ "hispanic",
+    pred.asi == pmax(pred.whi, pred.bla, pred.his, pred.asi, pred.oth) ~ "asian",
+    pred.oth == pmax(pred.whi, pred.bla, pred.his, pred.asi, pred.oth) ~ "unknown"
+  )) %>% 
+  rename(last_name = surname)
+
+# Recode White as 0, BIPOC as 1
+predicted_brain$bipoc <- ifelse(predicted_brain$max_race %in% c("hispanic", "black", "asian"), 1,
+                        ifelse(predicted_brain$max_race == "white", 0, NA)) 
+
+# Remove unnecessary columns
+predicted_brain <-predicted_brain %>% 
+  select(-pred.whi, -pred.bla, -pred.his, -pred.asi, -pred.oth, -max_race) %>%
+  left_join(brain_gender, by = "first_name")%>% 
+  mutate(bipoc = as.character(bipoc))
 ```
 
-# Read in Manual Labeled Data
+
+# Output missing data and manual label
 ```{r}
-labeled_data1<- read.csv("missing_race1.csv")
-labeled_data2<- read.csv("missing_race2.csv")
-labeled_data3<- read.csv("missing_race3.csv")
-labeled_data4<- read.csv("missing_race4.csv")
-labeled_data5<- read.csv("missing_race5.csv")
-labeled_data6<- read.csv("missing_race6.csv")
-labeled_data <- bind_rows(labeled_data1, labeled_data2, labeled_data3, 
-                          labeled_data4, labeled_data5, labeled_data6) %>% 
+missing_jocn <- predicted_jocn %>% 
+  filter(is.na(bipoc)|is.na(gender)) 
+
+missing_nature_neuro <- predicted_nature_neuro %>% 
+  filter(is.na(bipoc)|is.na(gender)) 
+
+missing_brain <- predicted_brain %>% 
+  filter(is.na(bipoc)|is.na(gender)) 
+
+#write.csv(missing_value, file = "missing_value_jocn.csv")
+#write.csv(missing_value, file = "missing_value_nature_neuro.csv")
+#write.csv(missing_value, file = "missing_value_brain.csv")
+# Rename these file after cleaning to "cleaned_missing_value_xxx.csv"
+```
+
+# Merge Manual Labeled Data
+```{r}
+# Read in manual labeled data in JoCN
+labeled_jocn<- read.csv("cleaned_missing_value_jocn.csv") %>% 
   mutate(gender = case_when(
     gender == '' ~ NA,
-    TRUE ~ gender
-  )) %>% 
-  select(-race,-last_name)%>% 
-  glimpse()
+    TRUE ~ gender),
+    bipoc = as.character(bipoc)) %>% 
+  select(-first_name,-last_name)
 
-new_labeled_data <- gender_data %>%
-  left_join(labeled_data, by = "full_name", suffix = c("_predicted", "_true"))
+# Merge labeled data into full name list
+final_jocn<- predicted_jocn %>% 
+  left_join(labeled_jocn, by = "full_name") %>% 
+  mutate(gender = coalesce(gender.x, gender.y),
+         bipoc  = coalesce(bipoc.x, bipoc.y)) %>%
+  select(-gender.x, -gender.y,-bipoc.x, -bipoc.y)
 
-new_labeled_data <- new_labeled_data %>%
-  mutate(gender = ifelse(!is.na(gender_true), gender_true, gender_predicted)) %>% 
-  select(-gender_predicted,-gender_true)
+# Recode any NA from merging due to full name unmatching
+final_jocn <- final_njocn %>%
+  group_by(first_name, last_name) %>%
+  mutate(bipoc = ifelse(is.na(bipoc), first(na.omit(bipoc)), bipoc)) %>%
+  ungroup()
 
-new_labeled_data <- new_labeled_data %>%
-  left_join(labeled_data %>% select(full_name, bipoc), by = "full_name", suffix = c("", "_original")) %>%
-  mutate(bipoc = ifelse(is.na(bipoc), bipoc_original, bipoc)) %>%
-  select(-bipoc_original)
+final_jocn<- final_jocn %>% 
+  distinct() 
 
- missing_gender_list <- new_labeled_data %>%filter(is.na(gender))
-#  Total of 298 missing gender
-#  missing_gender1 <- missing_gender_list %>%  slice(1:150)
-#  missing_gender2 <- missing_gender_list %>%  slice(151:298)
-#  write.csv(missing_gender1, "missing_gender1.csv", row.names = FALSE)
-#  write.csv(missing_gender2, "missing_gender2.csv", row.names = FALSE)
-
-labeled_data_1<- read.csv("missing_gender1.csv")
-labeled_data_2<- read.csv("missing_gender2.csv")
-labeled_data_full <- bind_rows(labeled_data_1, labeled_data_2) %>% 
-  select(-bipoc)
-
-new_labeled_data <- new_labeled_data %>%
-  rename(gender_predicted = gender)
-
-labeled_data_full <- labeled_data_full %>%
-  rename(gender_true = gender) 
-
-new_labeled_data <- new_labeled_data %>%
-  left_join(labeled_data_full, by = "full_name")
-
-new_labeled_data <- new_labeled_data %>%
-  mutate(
-    gender = ifelse(!is.na(gender_true), gender_true, gender_predicted)) %>%
-  select(-gender_predicted, -gender_true)
-```
-
-# Merge race and gender with data
-```{r}
-merged_data <- data %>%
-  left_join(new_labeled_data, by = "full_name") %>% 
-  mutate(bipoc = coalesce(bipoc, if_else(race %in% c("asian", "hispanic", "black"), 1, 0))) %>%
-  select(full_name, last_name, bipoc,gender)%>% 
-  glimpse()
-
-write.csv(merged_data, file = "cleaned_predicted_data.csv", row.names = FALSE)
-```
-
-
-### Brain
-
-# Read in Predicted Data in Brain
-```{r}
-raw_race<- read.csv("JoCN_name_list_race.csv") 
-raw_gender<- read.csv("JoCN_name_list_gender.csv") %>% janitor::clean_names()
-
-data <- raw_race %>% 
-  select(full_name, last_name, max_race) %>% 
-  rename(race = max_race) %>% 
-   mutate(race = if_else(str_detect(last_name, regex("^Van |^di |^Le ", ignore_case = TRUE)), "white", race)) %>% 
-  glimpse()
-
-gender_data<- raw_gender %>%
+# Read in manual labeled data in Nature Neuroscience
+labeled_nature_neuro<- read.csv("cleaned_missing_value_nature_neuro.csv") %>% 
   mutate(gender = case_when(
-    gender == "male" & gender_probability < 0.7 ~ NA,
-    gender == "female" & gender_probability < 0.7 ~ NA,
-    gender == 'unknown' ~ NA,
-    TRUE ~ gender
-  )) %>% 
-  select(-gender_probability,-last_name, -first_name)
+    gender == '' ~ NA,
+    TRUE ~ gender),
+  bipoc = as.character(bipoc)) %>% 
+  select(-first_name,-last_name)
 
-gender_data <- gender_data %>%
-  mutate(gender = recode(gender, "female" = "f", "male" = "m"))
+# Merge labeled data into full name list
+final_nature_neuroscience<- predicted_nature_neuro %>% 
+  left_join(labeled_nature_neuro, by = "full_name") %>% 
+  mutate(gender = coalesce(gender.x, gender.y),
+         bipoc  = coalesce(bipoc.x, bipoc.y)) %>%
+  select(-gender.x, -gender.y,-bipoc.x, -bipoc.y)
 
-#missing_race<- data %>% filter(race == "unknown")
-#missing_race1 <- missing_race %>%  slice(1:500)
-#missing_race2 <- missing_race %>%  slice(501:1000)
-#missing_race3 <- missing_race %>%  slice(1001:1500)
-#missing_race4 <- missing_race %>%  slice(1501:2000)
-#missing_race5 <- missing_race %>%  slice(2001:2500)
-#missing_race6 <- missing_race %>%  slice(2501:2897)
-#write.csv(missing_race1, file = "missing_race1.csv", row.names = FALSE)
-#write.csv(missing_race2, file = "missing_race2.csv", row.names = FALSE)
-#write.csv(missing_race3, file = "missing_race3.csv", row.names = FALSE)
-#write.csv(missing_race4, file = "missing_race4.csv", row.names = FALSE)
-#write.csv(missing_race5, file = "missing_race5.csv", row.names = FALSE)
-#write.csv(missing_race6, file = "missing_race6 .csv", row.names = FALSE)
+# Recode any NA from merging due to full name unmatching
+final_nature_neuroscience <- final_nature_neuroscience %>%
+  group_by(first_name, last_name) %>%
+  mutate(bipoc = ifelse(is.na(bipoc), first(na.omit(bipoc)), bipoc)) %>%
+  ungroup()
+
+# Manual clean for some author name due to formatting in name (e.g. with or without initials)
+final_nature_neuroscience$gender[final_nature_neuroscience$full_name == "Xu, Chongchong"] <- NA
+final_nature_neuroscience$bipoc[final_nature_neuroscience$full_name == "Mcrae, Jeremy"] <- 0
+final_nature_neuroscience$bipoc[final_nature_neuroscience$full_name == "Vyssotski, Alexei L."] <- 0
+final_nature_neuroscience$bipoc[final_nature_neuroscience$full_name == "Ölveczky, Bence P."] <- 0
+final_nature_neuroscience$bipoc[final_nature_neuroscience$full_name == "Sasmita, Andrew O."] <- 1
+final_nature_neuroscience$bipoc[final_nature_neuroscience$full_name == "Szatmari-, Peter"] <- 0
+final_nature_neuroscience$bipoc[final_nature_neuroscience$full_name == "lagier-Tourenne, Clotilde"] <- 0
+final_nature_neuroscience$bipoc[final_nature_neuroscience$full_name == "Wamsteeker, Jaclyn I."] <- 0
+final_nature_neuroscience$bipoc[final_nature_neuroscience$full_name == "Marques, Tiago"] <- 0
+final_nature_neuroscience$bipoc[final_nature_neuroscience$full_name == "Von Schimmelmann, Melanie"] <- 0
+final_nature_neuroscience$bipoc[final_nature_neuroscience$full_name == "lagier-Tourenne, Clotilde"] <- 0
+final_nature_neuroscience$bipoc[final_nature_neuroscience$full_name == "van Ede, Freek"] <- 0
+
+final_nature_neuroscience<- final_nature_neuroscience %>% 
+  distinct() 
+
+# Read in manual labeled data in Nature Neuroscience
+labeled_brain<- read.csv("cleaned_missing_value_brain.csv") %>% 
+  mutate(gender = case_when(
+    gender == '' ~ NA,
+    TRUE ~ gender),
+  bipoc = as.character(bipoc)) %>% 
+  select(-first_name,-last_name)
+
+# Merge labeled data into full name list
+final_brain<- predicted_brain %>% 
+  left_join(labeled_brain, by = "full_name") %>% 
+  mutate(gender = coalesce(gender.x, gender.y),
+         bipoc  = coalesce(bipoc.x, bipoc.y)) %>%
+  select(-gender.x, -gender.y,-bipoc.x, -bipoc.y)
+
+# Recode any NA from merging due to full name unmatching
+final_brain<- final_brain %>%
+  group_by(first_name, last_name) %>%
+  mutate(bipoc = ifelse(is.na(bipoc), first(na.omit(bipoc)), bipoc)) %>%
+  ungroup()
+
+# Manual clean for some author name due to formatting in name (e.g. with or without initials)
+final_brain$bipoc[final_brain$full_name == "Treaba, Constantina A."] <- 0
+final_brain$bipoc[final_brain$full_name == "Mencacci, Niccolo E."] <- 0
+final_brain$bipoc[final_brain$full_name == "Kopruszinski, Carol"] <- 0
+final_brain$bipoc[final_brain$full_name == "Fonoff, Erich T."] <- 0
+final_brain$bipoc[final_brain$full_name == "Korenke, G. Christoph"] <- 0
+final_brain$bipoc[final_brain$last_name == "Chinnery"] <- 0
+final_brain$bipoc[final_brain$last_name == "Alkuraya"] <- 0
+final_brain$bipoc[final_brain$full_name == "Biessels, Geert Jan"] <- 0
+final_brain$bipoc[final_brain$last_name == "Pariente"] <- 0
+final_brain$bipoc[final_brain$last_name == "Caldairou"] <- 1
+final_brain$bipoc[final_brain$last_name == "Bedeschi"] <- 0
+final_brain$bipoc[final_brain$last_name == "Goadsby"] <- 0
+final_brain$bipoc[final_brain$full_name == "Kimbrough, Dorian"] <- 1
+final_brain$bipoc[final_brain$full_name == "Gaillard, William Davis"] <- 0
+final_brain$bipoc[final_brain$last_name == "Havrdova"] <- 0
+final_brain$bipoc[final_brain$last_name == "Laplaud"] <- 0
+final_brain$bipoc[final_brain$last_name == "Aasly"] <- 0
+final_brain$bipoc[final_brain$last_name == "Kamsteeg"] <- 0
+final_brain$bipoc[final_brain$last_name == "Cornblath"] <- 0
+final_brain$bipoc[final_brain$last_name == "Laplaud"] <- 0
+final_brain$bipoc[final_brain$full_name == "Marques Jr, Wilson"] <- 0
+final_brain$bipoc[final_brain$last_name == "Gelot"] <- 0
+final_brain$bipoc[final_brain$last_name == "Tatsui"] <- 0
+final_brain$bipoc[final_brain$last_name == "Altuzarra"] <- 0
+final_brain$bipoc[final_brain$last_name == "Pariente"] <- 0
+final_brain$bipoc[final_brain$last_name == "Caboclo"] <- 0
+final_brain$bipoc[final_brain$last_name == "Bemelmans"] <- 0
+final_brain$bipoc[final_brain$last_name == "Landwehrmeyer"] <- 0
+final_brain$bipoc[final_brain$last_name == "Kyvik"] <- 0
+final_brain$bipoc[final_brain$last_name == "Mehndiratta"] <- 0
+final_brain$bipoc[final_brain$last_name == "Billingsley"] <- 0
+final_brain$bipoc[final_brain$last_name == "Karadottir"] <- 0
+final_brain$bipoc[final_brain$last_name == "Galasko"] <- 0
+final_brain$bipoc[final_brain$last_name == "Baria"] <- 0
+final_brain$bipoc[final_brain$last_name == "Benabid"] <- 0
+final_brain$bipoc[final_brain$full_name == "Moraes Filho, Milton"] <- 0
+final_brain$bipoc[final_brain$last_name == "Meinck"] <- 0
+final_brain$bipoc[final_brain$full_name == "Lee, Hyo M."] <- 1
+final_brain$bipoc[final_brain$last_name == "Gorson"] <- 0
+final_brain$bipoc[final_brain$last_name == "Moghadam"] <- 0
+final_brain$gender[final_brain$last_name == "Asmann"] <- 1
+final_brain$gender[final_brain$last_name == "Benabid"] <- 0
+final_brain$gender[final_brain$full_name == "Lee, Hyo M."] <- 0
+final_brain$gender[final_brain$last_name == "Meinck"] <- 0
+final_brain$gender[final_brain$full_name == "Liu, Jia"] <- 0
+final_brain$gender[final_brain$last_name == "Jonckheere"] <- 0
+final_brain$gender[final_brain$full_name == "McKenzie, Chaseley"] <- 1
+final_brain$gender[final_brain$full_name == "Zhang, Wei"] <- 0
+final_brain$gender[final_brain$full_name == "Hu, Michele"] <- 1
+final_brain$gender[final_brain$full_name == "Hu, Michele T. M."] <- 1
+final_brain$gender[final_brain$last_name == "Gerasimenko"] <- 1
+final_brain$gender[final_brain$full_name == "Liu, Li"] <- 0
+final_brain$gender[final_brain$first_name == "Cheney"] <- 0
+final_brain$gender[final_brain$last_name == "Kuehn"] <- 1
+final_brain$gender[final_brain$full_name == "Liu, Wei"] <- 0
+final_brain$gender[final_brain$last_name == "Ferman"] <- 1
+final_brain$gender[final_brain$last_name == "Mandelstam"] <- 1
+final_brain$gender[final_brain$last_name == "Double"] <- 0
+final_brain$gender[final_brain$last_name == "Lindenberger"] <- 0
+final_brain$gender[final_brain$last_name == "Hsiung"] <- 0
+final_brain$gender[final_brain$last_name == "Leavitt"] <- 0
+final_brain$gender[final_brain$full_name == "Johnston, Blair"] <- 0
+
+final_brain<- final_brain %>% 
+  distinct() 
 ```
+
+# Merge all datasets
+```{r}
+final<- final_jocn %>%  
+  bind_rows(final_nature_neuroscience) %>% 
+  bind_rows(final_brain) %>% 
+  distinct(full_name, gender, bipoc)%>% 
+  glimpse()
+```
+
+# Output datasets
+```{r}
+write.csv(final, file = "updating_name_value.csv", row.names = FALSE)
+```
+
 

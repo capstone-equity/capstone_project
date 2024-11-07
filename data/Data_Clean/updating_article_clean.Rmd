@@ -854,8 +854,7 @@ manual_clean_data <- adjusted_data %>%
          corresponding_author = ifelse(doi == "10.1093/brain/awaa426", "Zhou, Yan", corresponding_author),
          corresponding_author = ifelse(doi == "10.1093/brain/awz269", "Gelinas, Jennifer N.", corresponding_author),
          corresponding_author = ifelse(doi == "10.1093/brain/awy323", "Kaufmann, Walter E.", corresponding_author),
-         corresponding_author = ifelse(doi == "	
-10.1093/brain/awy324", "Wagnon, Jacy L.", corresponding_author),
+         corresponding_author = ifelse(doi == "10.1093/brain/awy324", "Wagnon, Jacy L.", corresponding_author),
          corresponding_author = ifelse(doi == "10.1093/brain/awy283", "Hanna, Michael G.", corresponding_author),
          corresponding_author = ifelse(doi == "10.1093/brain/awx094", "Spinazzola, Antonella", corresponding_author),
          corresponding_author = ifelse(doi == "10.1093/brain/aww223", "Volkmann, Jens", corresponding_author),
@@ -1112,8 +1111,7 @@ manual_clean_data <- adjusted_data %>%
           corresponding_author = ifelse(doi == "10.1038/nn.2656", "Klaembt, Christian", corresponding_author),
           corresponding_author = ifelse(doi == "10.1093/brain/awq021", "Kloeppel, Stefan", corresponding_author),
           corresponding_author = ifelse(doi == "10.1093/brain/awp081", "Kloeppel, Stefan", corresponding_author),
-          corresponding_author = ifelse(doi == "10.1038/nn.2280", "	
-Knoell, Bernd", corresponding_author),
+          corresponding_author = ifelse(doi == "10.1038/nn.2280", "Knoell, Bernd", corresponding_author),
           corresponding_author = ifelse(doi == "10.1093/brain/aww170", "Kuepper, Hanna", corresponding_author),
           corresponding_author = ifelse(doi == "10.1038/s41593-021-00917-2", "Karadottir, Ragnhildur Thora", corresponding_author),
           corresponding_author = ifelse(doi == "10.1038/nn.3102", "Kraemer, Helmut", corresponding_author),

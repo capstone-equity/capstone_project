@@ -1156,7 +1156,7 @@ manual_clean_data <- adjusted_data %>%
           corresponding_author = ifelse(doi == "10.1038/nn.2305", "Pare, Denis", corresponding_author),
           corresponding_author = ifelse(doi == "10.1038/s41593-018-0249-3", "Pinol, Ramon A.", corresponding_author),
           corresponding_author = ifelse(doi == "10.1038/s41593-018-0292-0", "Polania, Rafael", corresponding_author),
-           corresponding_author = ifelse(doi == "10.1093/brain/awq212", "Peran, Patrice", corresponding_author),
+          corresponding_author = ifelse(doi == "10.1093/brain/awq212", "Peran, Patrice", corresponding_author),
           corresponding_author = ifelse(doi == "10.1093/brain/awq311", "Perennou, Dominic", corresponding_author),
           corresponding_author = ifelse(doi == "10.1093/brain/awv342", "Perez-Duenas, Belen", corresponding_author),
           corresponding_author = ifelse(doi == "10.1093/brain/awz230", "Perez-Navarro, Esther", corresponding_author),
@@ -1283,8 +1283,6 @@ manual_clean_data <- adjusted_data %>%
           corresponding_author = ifelse(doi == "10.1093/brain/awp234", "Lees, AJ", corresponding_author),
           corresponding_author = ifelse(doi == "10.1093/brain/awp164", "Chan, A", corresponding_author))
 ```
-
-
 # Merge with predicted+labeled data
 ```{r}
 predicted_data<- read.csv("updating_name_value.csv") %>% 
@@ -1339,6 +1337,9 @@ merged_clean_data <- merged_clean_data %>%
     )
   )  %>% 
   select(-both_match, -none_match,-first_author_last_name,-last_author_last_name, -corresponding_author, -first_author, -last_author)
+
+write.csv(merged_clean_data, file= "updating_cr_data")
+
 #等待clean
 summary_data <- merged_clean_data %>%
   group_by(doi) %>%

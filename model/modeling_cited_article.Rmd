@@ -1,0 +1,312 @@
+---
+title: "modeling_cited_article"
+author: "Shiyu Yang"
+date: "2024-09-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(conflicted)
+library(tidyverse)
+library(nnet)
+library(splines)
+library(purrr)
+```
+
+```{r}
+raw_cited_article<- read.csv("updating_cleaned_reference.csv")
+
+data<- raw_cited_article %>% 
+  dplyr::filter(!is.na(first_author_gender)) %>% 
+  dplyr::filter(!is.na(first_author_bipoc)) %>% 
+  dplyr::filter(!is.na(last_author_gender)) %>% 
+  dplyr::filter(!is.na(last_author_bipoc)) %>% 
+  dplyr::filter(!is.na(corresponding_author_bipoc)) %>%   
+  dplyr::filter(!is.na(all_bipoc)) %>%   
+  dplyr::filter(!is.na(all_white)) %>%  
+  dplyr::filter(!is.na(all_men)) %>%   
+  dplyr::filter(!is.na(all_women)) %>%  
+  dplyr::filter(!is.na(doi)) %>%
+  mutate(
+    first_author_gender_bipoc = ifelse(first_author_gender_bipoc == 0, "00", 
+                                       ifelse(first_author_gender_bipoc == 1, "01", as.character(first_author_gender_bipoc))),
+    last_author_gender_bipoc = ifelse(last_author_gender_bipoc == 0, "00", 
+                                      ifelse(last_author_gender_bipoc == 1, "01", as.character(last_author_gender_bipoc))),
+    corresponding_author_gender_bipoc = ifelse(corresponding_author_gender_bipoc == 0, "00", 
+                                               ifelse(corresponding_author_gender_bipoc == 1, "01", as.character(corresponding_author_gender_bipoc)))
+  ) %>% 
+  mutate(across(where(is.character), factor)) %>% 
+  mutate(across(c(single_author, fund, affiliation_dev, affiliation_us,
+                  first_author_bipoc, first_author_gender, first_author_gender_bipoc,
+                  last_author_gender,last_author_bipoc, last_author_gender_bipoc,
+                  corresponding_author_gender,
+                  corresponding_author_bipoc, corresponding_author_gender_bipoc,
+                  all_men,all_women,all_white,all_bipoc), 
+                as.factor))  %>% 
+  glimpse()
+```
+
+```{r}
+cited_article$reference_year_spline <- bs(cited_article$reference_year, df = 6)
+cited_article$author_count_spline <- bs(cited_article$author_count, df = 6)
+
+
+model1 <- nnet::multinom(corresponding_author_gender_bipoc ~ reference_year_spline + author_count_spline + fund + affiliation_us, data = cited_article)
+
+
+summary(model1)
+```
+```{r}
+model2 <- nnet::multinom(last_author_gender_bipoc ~ reference_year + author_count + fund + affiliation_us, data = cited_article)
+
+summary(model2)
+```
+
+```{r}
+n_randomizations <- 1000
+# Function to randomize gender_bipoc categories using predicted probabilities
+randomize_gender_bipoc <- function(data) {
+  # Extract predicted probabilities
+  prob_matrix <- predict(model1, type = "probs")
+  
+  # Sample from the levels of corresponding_author_gender_bipoc
+  sampled_gender_bipoc <- apply(prob_matrix, 1, function(probs) {
+    sample(levels(data$first_author_gender_bipoc), size = 1, prob = probs)
+  })
+  
+  return(sampled_gender_bipoc)
+}
+
+# Store results of randomizations
+randomized_results <- map_dfr(1:n_randomizations, function(i) {
+  # Randomize gender_bipoc for the cited_article
+  randomized_bipoc <- randomize_gender_bipoc(cited_article)
+  
+  # Fit your model again to get the estimates from the null model
+  model <- nnet::multinom(randomized_bipoc ~ reference_year_spline + author_count_spline + fund + affiliation_us, data = cited_article)
+  
+  # Return coefficients as a data frame
+  as.data.frame(t(coef(model)))
+})
+
+# Calculate observed estimates from your original model
+observed_coefficients <- coef(model1)
+
+# Function to calculate p-values
+calculate_p_values <- function(observed_estimate, randomized_estimates) {
+  p_value <- mean(abs(randomized_estimates) >= abs(observed_estimate))
+  return(p_value)
+}
+
+# Apply to coefficients of interest
+p_values <- sapply(observed_coefficients, function(obs_coef) {
+  calculate_p_values(obs_coef, randomized_results)
+})
+
+# Adjust for multiple comparisons using Holm-Bonferroni
+adjusted_p_values <- p.adjust(p_values, method = "holm")
+
+# Reporting results
+results_summary <- data.frame(
+  Estimate = observed_coefficients,
+  P_Value = p_values,
+  Adjusted_P_Value = adjusted_p_values
+)
+
+print(results_summary)
+
+```
+
+```{r}
+n_randomizations <- 1000
+# Function to randomize gender_bipoc categories using predicted probabilities
+randomize_gender_bipoc <- function(data) {
+  # Extract predicted probabilities
+  prob_matrix <- predict(model2, type = "probs")
+  
+  # Sample from the levels of corresponding_author_gender_bipoc
+  sampled_gender_bipoc <- apply(prob_matrix, 1, function(probs) {
+    sample(levels(data$last_author_gender_bipoc), size = 1, prob = probs)
+  })
+  
+  return(sampled_gender_bipoc)
+}
+
+# Store results of randomizations
+randomized_results <- map_dfr(1:n_randomizations, function(i) {
+  # Randomize gender_bipoc for the cited_article
+  randomized_bipoc <- randomize_gender_bipoc(cited_article)
+  
+  # Fit your model again to get the estimates from the null model
+  model <- nnet::multinom(randomized_bipoc ~ reference_year + author_count + fund + affiliation_us, data = cited_article)
+  
+  # Return coefficients as a data frame
+  as.data.frame(t(coef(model)))
+})
+
+# Calculate observed estimates from your original model
+observed_coefficients <- coef(model2)
+
+# Function to calculate p-values
+calculate_p_values <- function(observed_estimate, randomized_estimates) {
+  p_value <- mean(abs(randomized_estimates) >= abs(observed_estimate))
+  return(p_value)
+}
+
+# Apply to coefficients of interest
+p_values <- sapply(observed_coefficients, function(obs_coef) {
+  calculate_p_values(obs_coef, randomized_results)
+})
+
+# Adjust for multiple comparisons using Holm-Bonferroni
+adjusted_p_values <- p.adjust(p_values, method = "holm")
+
+# Reporting results
+results_summary <- data.frame(
+  Estimate = observed_coefficients,
+  P_Value = p_values,
+  Adjusted_P_Value = adjusted_p_values
+)
+
+print(results_summary)
+
+```
+
+
+```{r}
+cited_article <- cited_article %>%
+  mutate(predicted_prob = predict(model1, type = "prob"))
+
+randomize_gender_bipoc <- function(data) {
+  sample(data$corresponding_author_gender_bipoc, size = nrow(data), replace = TRUE, prob = data$predicted_prob)
+}
+```
+
+```{r}
+# Number of randomizations
+n_randomizations <- 1000
+
+# Store results of randomizations
+randomized_results <- map_dfr(1:n_randomizations, function(i) {
+  randomized_bipoc <- randomize_gender_bipoc(cited_article)
+  cited_article %>%
+    mutate(randomized_gender_bipoc = randomized_bipoc) %>%
+    # Fit your model again to get the estimates from the null model
+    {nnet::multinom(randomized_gender_bipoc ~ reference_year_spline + author_count_spline + fund + affiliation_us, data = .)}
+})
+
+```
+
+
+```{r}
+# Calculate observed estimates from your original model
+observed_model <- nnet::multinom(corresponding_author_gender_bipoc ~ reference_year_spline + author_count_spline + fund + affiliation_us, data = cited_article)
+
+# Function to calculate p-values
+calculate_p_values <- function(observed_estimate, randomized_estimates) {
+  p_value <- mean(abs(randomized_estimates) >= abs(observed_estimate))
+  return(p_value)
+}
+
+# Apply to coefficients of interest
+p_values <- sapply(coef(observed_model), function(obs_coef) {
+  calculate_p_values(obs_coef, randomized_results$coefficients)
+})
+
+# Adjust for multiple comparisons using Holm-Bonferroni
+adjusted_p_values <- p.adjust(p_values, method = "holm")
+
+```
+
+```{r}
+# Set the number of iterations to generate the null distribution
+n_iterations <- 1000
+
+# Initialize an empty list to store null predictions
+null_predictions <- list()
+
+# Loop through multiple iterations, shuffling the data each time
+for (i in 1:n_iterations) {
+  
+  # Shuffle the citing authors randomly
+  shuffled_citing <- data$first_author_gender_bipoc[sample(1:nrow(data), nrow(data))]
+  
+  # Shuffle the cited authors randomly
+  shuffled_cited <- data$first_author_gender_bipoc[sample(1:nrow(data), nrow(data))]
+  
+  # Create a data frame with the shuffled data
+  shuffled_data <- data.frame(
+    citing_first_author_gender_bipoc = shuffled_citing,
+    cited_first_author_gender_bipoc = shuffled_cited
+  )
+  
+  # Compute the null citation patterns by counting the occurrences of each gender combination
+  null_counts <- table(shuffled_data$citing_first_author_gender_bipoc, shuffled_data$cited_first_author_gender_bipoc)
+  
+  # Store the results
+  null_predictions[[i]] <- null_counts
+}
+
+# Now, compute the average expected citation counts across all iterations of the null model
+null_avg <- Reduce("+", null_predictions) / n_iterations
+
+
+# Compute the observed citation counts
+observed_counts <- table(data$first_author_gender_bipoc, data$first_author_gender_bipoc)
+
+# Compute the difference between observed and null citation counts
+over_under_citation <- (observed_counts - null_avg) / null_avg * 100
+
+```
+
+```{r}
+# Convert the null distribution to a data frame for plotting
+null_data <- as.data.frame(as.table(null_avg))
+
+# Add columns for the observed over/undercitation
+null_data$over_under <- as.vector(over_under_citation)
+
+# Plot null distribution and observed over/undercitation
+ggplot(null_data, aes(x = Var2, y = Freq, fill = Var1)) +
+  geom_violin(trim = FALSE) +
+  geom_boxplot(width = 0.1, color = "black", outlier.shape = NA) +
+  geom_point(aes(y = over_under), color = "red", size = 2) +
+  ylab("Expected citation rate (Null)") +
+  xlab("Cited Author Gender Combinations") +
+  ggtitle("Observed vs Null Citation Patterns") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+```
+
+# Reference Models
+```{r}
+# Characteristics of article (year, author_count, fund, affiliation) on predicted probabilities for each gender&race category in first author
+model1 <- gam(first_author_gender ~ affiliation_us,
+             family = binomial, data = cited_article)
+
+model1 <- gam(first_author_gender_bipoc ~ s(reference_year) + s(author_count) + 
+                fund + affiliation_us, 
+             family = multinom(K = 4), data = cited_article)
+
+# Characteristics of article (year, author_count, fund, affiliation) on predicted probabilities for each gender&race category in last author
+model2 <- gam(last_author_gender_bipoc ~ s(reference_year) + s(author_count) + 
+                fund + affiliation_us, 
+             family = multinom(K = 4), data = cited_article)
+
+# Characteristics of article (year, author_count, fund, affiliation) on predicted probabilities for each gender&race category in corresponding author
+model3 <- gam(corresponding_author_gender_bipoc ~ s(reference_year) + s(author_count) 
+              + fund + affiliation_us, 
+             family = multinom(K = 4), data = cited_article)
+
+## 没法run First+Last
+model4 <- gam(fl_gender ~ s(reference_year) + s(author_count) 
+              + fund + affiliation_us, 
+             family = multinom(K = 4), data = cited_article)
+
+model5 <- gam(fl_bipoc ~ s(reference_year) + s(author_count) 
+              + fund + affiliation_us, 
+             family = multinom(K = 4), data = cited_article)
+
+#model6<- glm(mixed_gender ~ )
+```

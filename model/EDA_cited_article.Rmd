@@ -1,0 +1,175 @@
+---
+title: "EDA"
+author: "Shiyu Yang"
+date: "2024/8/27"
+output: html_document
+---
+
+```{r}
+options(conflicts.policy = "depends.ok")
+devtools::source_url("https://github.com/jjcurtin/lab_support/blob/main/fun_ml.R?raw=true")
+tidymodels_conflictRules()
+
+library(cowplot, include.only = c("plot_grid", "theme_half_open"))
+library(corrplot, include.only = "corrplot.mixed") 
+library(tidyverse) 
+library(tidymodels)
+library(ggplot2)
+
+devtools::source_url("https://github.com/jjcurtin/lab_support/blob/main/fun_eda.R?raw=true")
+devtools::source_url("https://github.com/jjcurtin/lab_support/blob/main/fun_plots.R?raw=true")
+```
+
+```{r}
+raw_data<- read.csv("updating_cleaned_reference.csv")
+
+data<- raw_data %>% 
+  dplyr::filter(!is.na(first_author_gender)) %>% 
+  dplyr::filter(!is.na(first_author_bipoc)) %>% 
+  dplyr::filter(!is.na(last_author_gender)) %>% 
+  dplyr::filter(!is.na(last_author_bipoc)) %>% 
+  dplyr::filter(!is.na(corresponding_author_bipoc)) %>%   
+  dplyr::filter(!is.na(all_bipoc)) %>%   
+  dplyr::filter(!is.na(all_white)) %>%  
+  dplyr::filter(!is.na(all_men)) %>%   
+  dplyr::filter(!is.na(all_women)) %>%  
+  dplyr::filter(!is.na(doi)) %>%
+  mutate(
+    first_author_gender_bipoc = ifelse(first_author_gender_bipoc == 0, "00", 
+                                       ifelse(first_author_gender_bipoc == 1, "01", as.character(first_author_gender_bipoc))),
+    last_author_gender_bipoc = ifelse(last_author_gender_bipoc == 0, "00", 
+                                      ifelse(last_author_gender_bipoc == 1, "01", as.character(last_author_gender_bipoc))),
+    corresponding_author_gender_bipoc = ifelse(corresponding_author_gender_bipoc == 0, "00", 
+                                               ifelse(corresponding_author_gender_bipoc == 1, "01", as.character(corresponding_author_gender_bipoc)))
+  ) %>% 
+  mutate(across(where(is.character), factor)) %>% 
+  mutate(across(c(single_author, fund, affiliation_dev, affiliation_us,
+                  first_author_bipoc, first_author_gender, first_author_gender_bipoc,
+                  last_author_gender,last_author_bipoc, last_author_gender_bipoc,
+                  corresponding_author_gender,
+                  corresponding_author_bipoc, corresponding_author_gender_bipoc,
+                  all_men,all_women,all_white,all_bipoc), 
+                as.factor))  %>% 
+  glimpse()
+```
+
+```{r}
+data %>% skim_all()
+```
+
+# Univariant Distribution
+
+## Numeric variables
+```{r}
+data %>% 
+  select(where(is.numeric)) %>% 
+  names() %>% 
+  map(\(name) plot_box_violin(df = data, x = name)) %>% 
+  plot_grid(plotlist = ., ncol = 2)
+```
+
+## Categorical variables
+### Article characteristic
+```{r}
+data %>% plot_bar("document_type")
+data %>% plot_bar("fund")
+data %>% plot_bar("country")
+data %>% plot_bar("affiliation_con")
+data %>% plot_bar("affiliation_dev")
+data %>% plot_bar("affiliation_us")
+data %>% plot_bar("journal")
+```
+
+### Gender and Race
+```{r}
+data %>% plot_bar("first_author_bipoc")
+data %>% plot_bar("first_author_gender")
+data %>% plot_bar("first_author_gender_bipoc")
+data %>% plot_bar("last_author_bipoc")
+data %>% plot_bar("last_author_gender")
+data %>% plot_bar("last_author_gender_bipoc")
+data %>% plot_bar("corresponding_author_bipoc")
+data %>% plot_bar("corresponding_author_gender")
+data %>% plot_bar("corresponding_author_gender_bipoc")
+data %>% plot_bar("fl_gender")
+data %>% plot_bar("fl_bipoc")
+data %>% plot_bar("all_men")
+data %>% plot_bar("all_women")
+data %>% plot_bar("all_white")
+data %>% plot_bar("all_bipoc")
+```
+
+# Bivariate Relationships
+
+## Numeric variables
+```{r}
+data %>% 
+  select(where(is.numeric) &!cited_count) %>% 
+  names() %>% 
+  map(\(name) plot_scatter(df = data, x = name, y = "cited_count")) %>% 
+  plot_grid(plotlist = ., ncol = 2)
+```
+Female ratio and reference_year has negative correlation with cited_count
+
+```{r}
+data %>% 
+  select(where(is.numeric)) %>% 
+  cor(use = "pairwise.complete.obs") %>% 
+  corrplot::corrplot.mixed()
+```
+
+## Categorical variables
+
+### Article characteristic
+```{r}
+data %>% plot_grouped_box_violin ("document_type", "cited_count")
+data %>% plot_grouped_box_violin ("fund", "cited_count")
+data %>% plot_grouped_box_violin ("affiliation_con", "cited_count")
+data %>% plot_grouped_box_violin ("affiliation_dev", "cited_count")
+data %>% plot_grouped_box_violin ("affiliation_us", "cited_count")
+```
+
+### first_author_gender_bipoc
+```{r}
+data %>% plot_grouped_box_violin ("document_type", "cited_count")
+data %>% plot_grouped_box_violin ("fund", "cited_count")
+data %>% plot_grouped_box_violin ("affiliation_con", "cited_count")
+data %>% plot_grouped_box_violin ("affiliation_dev", "cited_count")
+data %>% plot_grouped_box_violin ("affiliation_us", "cited_count")
+data %>% plot_grouped_box_violin ("journal", "cited_count")
+```
+
+### Gender and Race
+```{r}
+data %>% plot_grouped_box_violin ("first_author_bipoc", "cited_count")
+data %>% plot_grouped_box_violin ("first_author_gender", "cited_count")
+data %>% plot_grouped_box_violin ("first_author_gender_bipoc", "cited_count")
+data %>% plot_grouped_box_violin ("last_author_bipoc", "cited_count")
+data %>% plot_grouped_box_violin ("last_author_gender", "cited_count")
+data %>% plot_grouped_box_violin ("last_author_gender_bipoc", "cited_count")
+data %>% plot_grouped_box_violin ("corresponding_author_bipoc", "cited_count")
+data %>% plot_grouped_box_violin ("corresponding_author_gender", "cited_count")
+data %>% plot_grouped_box_violin ("corresponding_author_gender_bipoc", "cited_count")
+data %>% plot_grouped_box_violin ("fl_gender", "cited_count")
+data %>% plot_grouped_box_violin ("fl_bipoc", "cited_count")
+```
+More skewed in white and male author papers
+
+```{r}
+ggplot(data, aes(x = author_count, fill = first_author_gender_bipoc)) + 
+  geom_density(alpha = 0.5, adjust = 3) + 
+  facet_wrap(~ first_author_gender_bipoc)
+
+ggplot(data, aes(x = publication_year, fill = first_author_gender_bipoc)) + 
+  geom_density(alpha = 0.5) + 
+  facet_wrap(~ first_author_gender_bipoc)
+
+ggplot(data, aes(x = reference_year, fill = first_author_gender_bipoc)) + 
+  geom_density(alpha = 0.5) + 
+  facet_wrap(~ first_author_gender_bipoc)
+
+ggplot(data, aes(x = woman_ratio, fill = first_author_gender_bipoc)) + 
+  geom_density(alpha = 0.5) + 
+  facet_wrap(~ first_author_gender_bipoc)
+```
+first_author_gender_bipoc and author_count has non-linear relationship

@@ -105,6 +105,7 @@ data<- jocn %>%
   filter(!is.na(reprint_addresses)) %>%   
   filter(reprint_addresses!="") %>% 
   glimpse()
+write.csv(data, file = "raw_author_data.csv")
 ```
 # Merge race and gender
 ```{r}

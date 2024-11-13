@@ -6,3 +6,27 @@ Step 2. Open author_clean.Rmd to clean author data from step1 and generate name 
 
 Step 3. Open name_prediction.Rmd to use genderized.io and wru to predict gender based on first name and predict race based on last name. Additional steps involved such as upload csv file to genderized.io and manual label missing values. 
 * Search full name of author and find their personal websites or lab websites. If pronouns are specified, use the relative gender label. If not provide, use picture to make prediction on gender and race. No picture online available coded as NA. After all clean, end with updating_name_value.csv.
+
+Gender: Binary variable (Woman vs Man), women coded as 1 and man coded as 0. (Factor)
+
+BIPOC: Binary variable (BIPOC vs White), BIPOC coded as 1 and White coded as 0. (Factor)
+
+Step 4. Open updating_article_clean.Rmd. Merged 3 journal datasets and cleaned columns. Merged gender and BIPOC information to the authors and publications. Output updating_cr_data.csv for reference level analysis and updating_full_data.csv for pubication level analysis.
+
+First author: cleaned from author_full_names, the first author name in the author list. (Character)
+
+Last author: cleaned from author_full_names, the last author name in the author list. (Character)
+
+Corresponding author: cleaned from reprint address. Because it only provide author's full last name but initial for first name, we match with first or last author. Manual cleaned for those duplicate and none-match authors. When there are multiple authors, we choose the author has overlap with first or last author position. (Character)
+
+Author counts: cleaned from author_full_names, the counts of names in the author list. (Numeric)
+
+Fund: cleaned from funding_orgs, if value exists in funding_orgs, coded as 1 means funded, if no value/NA coded as 0 means not funded. (Factor)
+
+Country: cleaned from reprint_addresses, this is the country of corresponding author's affliation.(Character)
+
+Affliation US: cleaned from country, coded 1 as US affiliation, coded 0 as non-US affliation. (Factor)
+
+Affliation DEV: cleaned from country, coded 1 as developed affiliation, coded 0 as developing affliation. (Factor)
+
+Publication year: cleaned as 0 is 2024, and the larger the number the older the publication. (Numeric)

@@ -1338,26 +1338,17 @@ merged_clean_data <- merged_clean_data %>%
   )  %>% 
   select(-both_match, -none_match,-first_author_last_name,-last_author_last_name, -corresponding_author, -first_author, -last_author)
 
-write.csv(merged_clean_data, file= "updating_cr_data")
-
-#等待clean
-summary_data <- merged_clean_data %>%
-  group_by(doi) %>%
-  mutate(all_men = ifelse(all(gender == "0"), 1, 0),
-         all_women = ifelse(all(gender == "1"), 1, 0),
-         all_white = ifelse(all(bipoc == "0"), 1, 0),
-         all_bipoc = ifelse(all(bipoc == "1"), 1, 0))
+#write.csv(merged_clean_data, file= "updating_cr_data.csv")
 ```
-
 
 # Recode rest of the info
 ```{r}
 gender_bipoc<- read.csv("updating_gender_bipoc_data.csv") %>% 
-  distinct(doi, woman_ratio,all_men, all_women, all_white, all_bipoc) 
+  distinct(doi, all_men, all_women, all_white, all_bipoc) 
 
 full_data<- merged_clean_data %>% 
   left_join(gender_bipoc, by = "doi")%>% 
-  select(-article_title, -keywords_plus, -reprint_addresses,-funding_orgs) %>% 
+  select(-article_title, -reprint_addresses,-funding_orgs) %>% 
   glimpse()
 
 write.csv(full_data, file = "updating_full_data.csv", row.names = FALSE)

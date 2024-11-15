@@ -7,6 +7,8 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(MASS)
 library(ggplot2)
 library(ggsignif)
 library(viridis)
@@ -57,24 +59,51 @@ data$author_count_c <- data$author_count - mean(data$author_count, na.rm = T)
 
 # Filtered out no overlap in corresponding author and first/last author (3% in this dataset)
 overlap_data<- data %>% dplyr::filter (overlap_corr_author == "1"|overlap_corr_author == "2")
+
+# Removed single author publication
+overlap_data<- overlap_data %>%
+  dplyr::filter (single_author == "0")
+```
+
+```{r}
+author <- read.csv ("updating_gender_bipoc_data.csv") %>% 
+  select(author_full_names, publication_year, gender, bipoc) %>% 
+  na.omit()
+
+author_counts <- author %>%
+  group_by(publication_year, gender, bipoc) %>%
+  summarise(count = n()) %>%
+  ungroup()
 ```
 
 # Visualization
+```{r}
+ggplot(author_counts, aes(x = publication_year, y = count, color = interaction(gender, bipoc))) +
+  geom_line(size = 1) +
+  labs(title = "Author Appearances Across Years by Gender and BIPOC Status",
+       x = "Publication Year",
+       y = "Number of Authors",
+       color = "Group (Gender & BIPOC)") +
+  scale_color_manual(values = c("blue", "red", "green", "purple"),
+                     labels = c("Male & Non-BIPOC", "Male & BIPOC", "Female & Non-BIPOC", "Female & BIPOC")) +
+  theme_minimal()
+
+```
 
 ```{r}
 m4_graph <- glm.nb(cited_count ~ first_author_gender * first_author_bipoc + last_author_gender * last_author_bipoc + publication_year + affiliation_us + fund + author_count + journal + document_type, data = overlap_data)
 
 new_data <- expand.grid(
-  first_author_gender = unique(no_out_overlap_data$first_author_gender),
-  last_author_gender = unique(no_out_overlap_data$last_author_gender),
-  first_author_bipoc = unique(no_out_overlap_data$first_author_bipoc),
-  last_author_bipoc = unique(no_out_overlap_data$last_author_bipoc),
-  affiliation_us = unique(no_out_overlap_data$affiliation_us),
-  publication_year = mean(no_out_overlap_data$publication_year, na.rm = T),
-  fund = unique(no_out_overlap_data$fund),
-  document_type = unique(data$document_type),
-  author_count =mean(no_out_overlap_data$author_count, na.rm = T),
-  journal = unique(no_out_overlap_data$journal)
+  first_author_gender = unique(overlap_data$first_author_gender),
+  last_author_gender = unique(overlap_data$last_author_gender),
+  first_author_bipoc = unique(overlap_data$first_author_bipoc),
+  last_author_bipoc = unique(overlap_data$last_author_bipoc),
+  affiliation_us = unique(overlap_data$affiliation_us),
+  publication_year = mean(overlap_data$publication_year, na.rm = T),
+  fund = unique(overlap_data$fund),
+  document_type = unique(overlap_data$document_type),
+  author_count =mean(overlap_data$author_count, na.rm = T),
+  journal = unique(overlap_data$journal)
 )
 
 predictions <- predict(m4_graph, newdata = new_data, type = "response", se.fit = TRUE)
@@ -168,14 +197,14 @@ plot
 m6_graph <- glm.nb(cited_count ~ all_women * all_bipoc + publication_year + affiliation_us + fund+ author_count + journal + document_type, data = overlap_data)
 
 new_data <- expand.grid(
-  all_women = unique(no_out_overlap_data$all_women),
-  all_bipoc = unique(no_out_overlap_data$all_bipoc),
-  affiliation_us = unique(no_out_overlap_data$affiliation_us),
-  publication_year = mean(no_out_overlap_data$publication_year, na.rm = T),
-  fund = unique(no_out_overlap_data$fund),
-  author_count =mean(no_out_overlap_data$author_count, na.rm = T),
-  document_type = unique(data$document_type),
-  journal = unique(no_out_overlap_data$journal)
+  all_women = unique(overlap_data$all_women),
+  all_bipoc = unique(overlap_data$all_bipoc),
+  affiliation_us = unique(overlap_data$affiliation_us),
+  publication_year = mean(overlap_data$publication_year, na.rm = T),
+  fund = unique(overlap_data$fund),
+  author_count =mean(overlap_data$author_count, na.rm = T),
+  document_type = unique(overlap_data$document_type),
+  journal = unique(overlap_data$journal)
 )
 
 predictions <- predict(m6_graph, newdata = new_data, type = "response", se.fit = TRUE)

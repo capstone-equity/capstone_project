@@ -1,0 +1,276 @@
+---
+title: "diversity"
+author: "Shiyu Yang"
+date: "2024-11-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggeffects)
+library(lme4)
+library(sjPlot)
+library(ggplot2)
+```
+
+# Read data
+```{r}
+raw_author_data<- read.csv("updating_gender_bipoc_data.csv") 
+
+author_data<- raw_author_data%>% 
+  mutate(bipoc = as.factor(bipoc),
+         gender = as.factor(gender)) %>% 
+  distinct() %>% 
+  glimpse()
+
+article_data<- read.csv("updating_full_data.csv") %>% 
+  glimpse()
+```
+
+# Data Wrangling
+
+```{r}
+diversity_data <- author_data %>%
+  select(author_full_names, doi, gender, bipoc) %>% 
+  group_by(doi) %>%
+  slice(-1) %>%  
+  summarize(
+    author_counts = n() ,  
+    women_prop = mean(gender == "1", na.rm = TRUE),  
+    bipoc_prop = mean(bipoc == "1", na.rm = TRUE)
+  )
+
+
+data <- article_data %>%
+  filter (overlap_corr_author == "1"|overlap_corr_author == "2") %>% 
+  select(doi, cited_count,first_author_gender, first_author_bipoc, last_author_gender, last_author_bipoc, corresponding_author_bipoc, corresponding_author_gender, publication_year, journal, author_count, document_type, fund, affiliation_us) %>%
+  left_join(diversity_data, by = "doi") %>% 
+  filter (single_author == "0")
+```
+
+# EDA
+
+## Author gender and BIPOC distribution in overall
+```{r}
+author_data <- author_data%>%
+  distinct(author_full_names,gender,bipoc) %>% 
+  mutate(bipoc = recode(bipoc, "1" = "BIPOC", "0" = "White"),
+         gender = recode(gender, "1" = "Woman", "0" = "Man")) 
+
+table(author_data$gender, author_data$bipoc)
+```
+
+```{r}
+ggplot(diversity_data, aes(x = women_prop)) +
+  geom_histogram(binwidth = 0.1, fill = "skyblue", color = "black") +
+  labs(x = "Proportion of Women Authors", y = "Number of Publications") 
+
+ggplot(diversity_data, aes(x = bipoc_prop)) +
+  geom_histogram(binwidth = 0.1, fill = "lightgreen", color = "black") +
+  labs(x = "Proportion of BIPOC Authors", y = "Number of Publications") 
+```
+
+# Model fitting
+```{r}
+m1 <- lmer(women_prop ~ first_author_gender * first_author_bipoc + publication_year + fund + author_count + document_type  + (1 | affiliation_us) + (1 | journal), data = data)
+
+m2 <- lmer(bipoc_prop ~ first_author_gender * first_author_bipoc + publication_year + fund + author_count + document_type  + (1 | affiliation_us) + (1 | journal), data = data)
+```
+
+```{r}
+summary(m1)
+summary(m2)
+```
+
+```{r}
+plot_model(m1, type = "est", show.values = TRUE, value.offset = 0.3) +
+  theme_minimal() +
+  labs(
+    title = "Fixed Effects for women_prop Model",
+    x = "Estimate",
+    y = "Predictor"
+  )
+
+interaction_effect <- ggpredict(m1, terms = c("first_author_gender", "first_author_bipoc"))
+
+interaction_effect_df <- as.data.frame(interaction_effect)
+
+ggplot(interaction_effect_df, aes(x = factor(x,levels = c(0, 1), labels = c("Man", "Woman")), y = predicted, fill = factor(group,levels = c(0, 1), labels = c("White", "BIPOC")))) +
+  geom_bar(stat = "identity", position = "dodge") + 
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), position = position_dodge(0.9), width = 0.2) + 
+  theme_minimal() +
+  labs(
+    title = "Predicted Women Author Proportion Based on First Author Gender and Race",
+    x = "Gender",
+    y = "Predicted Women Author Proportion",
+    fill = "Race"
+  ) +
+  scale_fill_manual(values = c("#0072B2", "#E69F00")) +  
+  theme(
+    legend.position = "top",  
+    text = element_text(size = 12) ,
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold")
+  )
+```
+```{r}
+plot_model(m2, type = "est", show.values = TRUE, value.offset = 0.3) +
+  theme_minimal() +
+  labs(
+    title = "Fixed Effects for women_prop Model",
+    x = "Estimate",
+    y = "Predictor"
+  )
+
+interaction_effect <- ggpredict(m2, terms = c("first_author_bipoc", "first_author_gender"))
+
+interaction_effect_df <- as.data.frame(interaction_effect)
+
+ggplot(interaction_effect_df, aes(x = factor(x,levels = c(0, 1), labels = c("White", "BIPOC")), y = predicted, fill = factor(group,levels = c(0, 1), labels = c("Man", "Woman")))) +
+  geom_bar(stat = "identity", position = "dodge") + 
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), position = position_dodge(0.9), width = 0.2) + 
+  theme_minimal() +
+  labs(
+    title = "Predicted BIPOC Author Proportion Based on First Author Gender and Race",
+    x = "Race",
+    y = "Predicted Women Author Proportion",
+    fill = "Gender"
+  ) +
+  scale_fill_manual(values = c("#0072B2", "#E69F00")) +  
+  theme(
+    legend.position = "top",  
+    text = element_text(size = 12) ,
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold")
+  )
+```
+```{r}
+mean_props <- data %>%
+  group_by(publication_year) %>%
+  summarize(mean_women_prop = mean(women_prop, na.rm = TRUE),
+            mean_bipoc_prop = mean(bipoc_prop, na.rm = TRUE))  
+
+ggplot(mean_props, aes(x = publication_year)) +
+  geom_line(aes(y = mean_women_prop, color = "Women Authors"), size = 1) + 
+  geom_point(aes(y = mean_women_prop, color = "Women Authors"), size = 2) +  
+  geom_line(aes(y = mean_bipoc_prop, color = "BIPOC Authors"), size = 1, linetype = "dashed") + 
+  geom_point(aes(y = mean_bipoc_prop, color = "BIPOC Authors"), size = 2) + 
+  labs(x = "Publication Year", y = "Mean Proportion") +
+  scale_color_manual(name = "Author Type", values = c("Women Authors" = "#999999", "BIPOC Authors" = "#D55E50")) + 
+  theme_minimal() +
+  ggtitle("Mean Proportions of Women and BIPOC Authors Over the Years") +
+  scale_x_reverse() +
+    theme(
+    legend.position = "top",  
+    text = element_text(size = 12) ,
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold")
+  )
+```
+```{r}
+first_author_year <- data %>%
+  filter(!is.na(first_author_bipoc) & !is.na(first_author_gender)) %>%
+  group_by(publication_year, first_author_bipoc, first_author_gender) %>%
+  summarize(count = n(), .groups = 'drop') %>%
+  group_by(publication_year) %>%
+  mutate(proportion = count / sum(count)) %>%  # Calculate proportion for each category
+  mutate(
+    bipoc_label = case_when(
+      first_author_bipoc == 1 ~ "BIPOC",
+      first_author_bipoc == 0 ~ "White"
+    ),
+    gender_label = case_when(
+      first_author_gender == 1 ~ "Woman",
+      first_author_gender == 0 ~ "Man"
+    ),
+    label = paste(gender_label, "-", bipoc_label) 
+  )%>%
+  mutate(label = factor(label, levels = c("Man - White", "Man - BIPOC", "Woman - White","Woman - BIPOC"))) 
+
+custom_colors <- c(
+  "Man - White" = "#0072B2",    
+  "Woman - White" = "lightblue",  
+  "Man - BIPOC" = "#E69F00",      
+  "Woman - BIPOC" = "#F0E442"     
+)
+
+ggplot(first_author_year, aes(x = publication_year, y = proportion, fill = label)) +
+  geom_area(alpha = 0.9, position = "fill") +  
+  labs(x = "Publication Year", y = "Proportion of Authors", fill = "Gender - BIPOC", color = "Gender - BIPOC", title = "Proportions of First Authors by Gender and BIPOC Status Over the Years") +
+  theme_bw() +
+  scale_x_reverse() +  
+  scale_fill_manual(values = custom_colors) +
+  theme(legend.position = "right") 
+
+```
+
+```{r}
+last_author_year <- data %>%
+  filter(!is.na(last_author_bipoc) & !is.na(last_author_gender)) %>%
+  group_by(publication_year, last_author_bipoc, last_author_gender) %>%
+  summarize(count = n(), .groups = 'drop') %>%
+  group_by(publication_year) %>%
+  mutate(proportion = count / sum(count)) %>%  # Calculate proportion for each category
+  mutate(
+    bipoc_label = case_when(
+      last_author_bipoc == 1 ~ "BIPOC",
+      last_author_bipoc == 0 ~ "White"
+    ),
+    gender_label = case_when(
+      last_author_gender == 1 ~ "Woman",
+      last_author_gender == 0 ~ "Man"
+    ),
+    label = paste(gender_label, "-", bipoc_label) 
+  )%>%
+  mutate(label = factor(label, levels = c("Man - White", "Man - BIPOC", "Woman - White","Woman - BIPOC"))) 
+
+custom_colors <- c(
+  "Man - White" = "#0072B2",    
+  "Woman - White" = "lightblue",  
+  "Man - BIPOC" = "#E69F00",      
+  "Woman - BIPOC" = "#F0E442"     
+)
+
+ggplot(last_author_year, aes(x = publication_year, y = proportion, fill = label)) +
+  geom_area(alpha = 0.9, position = "fill") +  
+  labs(x = "Publication Year", y = "Proportion of Authors", fill = "Gender - BIPOC", color = "Gender - BIPOC", title = "Proportions of Last Authors by Gender and BIPOC Status Over the Years") +
+  theme_bw() +
+  scale_x_reverse() +  
+  scale_fill_manual(values = custom_colors) +
+  theme(legend.position = "right") 
+```
+
+```{r}
+corresponding_author_year <- data %>%
+  filter(!is.na(corresponding_author_bipoc) & !is.na(corresponding_author_gender)) %>%
+  group_by(publication_year, corresponding_author_bipoc, corresponding_author_gender) %>%
+  summarize(count = n(), .groups = 'drop') %>%
+  group_by(publication_year) %>%
+  mutate(proportion = count / sum(count)) %>% 
+  mutate(
+    bipoc_label = case_when(
+      corresponding_author_bipoc == 1 ~ "BIPOC",
+      corresponding_author_bipoc == 0 ~ "White"
+    ),
+    gender_label = case_when(
+      corresponding_author_gender == 1 ~ "Woman",
+      corresponding_author_gender == 0 ~ "Man"
+    ),
+    label = paste(gender_label, "-", bipoc_label) 
+  )%>%
+  mutate(label = factor(label, levels = c("Man - White", "Man - BIPOC", "Woman - White","Woman - BIPOC"))) 
+
+custom_colors <- c(
+  "Man - White" = "#0072B2",    
+  "Woman - White" = "lightblue",  
+  "Man - BIPOC" = "#E69F00",      
+  "Woman - BIPOC" = "#F0E442"     
+)
+
+ggplot(corresponding_author_year, aes(x = publication_year, y = proportion, fill = label)) +
+  geom_area(alpha = 0.9, position = "fill") +  
+  labs(x = "Publication Year", y = "Proportion of Authors", fill = "Gender - BIPOC", color = "Gender - BIPOC", title = "Proportions of Last Authors by Gender and BIPOC Status Over the Years") +
+  theme_bw() +
+  scale_x_reverse() +  
+  scale_fill_manual(values = custom_colors) +
+  theme(legend.position = "right") 
+```
+

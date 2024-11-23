@@ -12,7 +12,10 @@ library(stringr)
 ```
 # Cited reference
 ```{r}
+# 9,323 publications in updating_cr_data
 updating_cr_data <- read.csv("updating_cr_data.csv")
+
+# Perform a series of operations on the read citation data
 reference<- updating_cr_data %>%
   separate_rows(cited_references, sep = "; ") %>% 
   mutate(reference = str_extract(cited_references, "(?<=DOI ).*"),
@@ -35,16 +38,20 @@ write.csv(reference, file = "updating_reference_data.csv", row.names = FALSE)
 
 # Read data
 ```{r}
+# Read author - related data from the raw_author_data.csv file, there are 92,325 authors
 author<- read.csv("raw_author_data.csv") %>% 
   select(author_full_names,doi,cited_references)
 
+# Read author - related data from the updating_gender_bipoc_data.csv file, there are 92.468  update authors
 updating_author<- read.csv("updating_gender_bipoc_data.csv") %>% 
   mutate(author_full_names = author_full_names) %>% 
   select(author_full_names,doi) 
 
+# Merge the above two author datasets into a new author dataset.
 author<- author %>% 
   bind_rows(updating_author)
 
+# Perform similar cleaning and format transformation operations on the citation data within it.
 reference<- author %>%
   separate_rows(cited_references, sep = "; ") %>% 
   mutate(reference = str_extract(cited_references, "(?<=DOI ).*"),
@@ -58,6 +65,7 @@ reference<- author %>%
          reference = str_replace(reference, "dx.doi.org/", "")
 )
 
+# Delete the no longer needed author and updating_author temporary variables.
 rm(author)
 rm(updating_author)
 
@@ -68,10 +76,13 @@ reference<- reference %>%
   filter(!is.na(reference)) %>% 
   select(author_full_names,doi,reference)
 
+# Calculate the list of authors corresponding to each DOI for subsequent self - citation judgment.
+# The dataset authors_per_doi contains 2710 .
 authors_per_doi <- reference %>%
   group_by(doi) %>%
   summarise(authors = list(unique(author_full_names)))
 
+#The dataset self_citations contains 1326
 self_citations <- reference %>%
   left_join(authors_per_doi, by = c("reference" = "doi")) %>%
   rowwise() %>%
@@ -79,11 +90,13 @@ self_citations <- reference %>%
   filter(is_self_citation) %>%
   select(doi, reference, author_full_names)
 
+# The dataset reference_info contains 157385 
 reference_info<- read.csv("updating_reference_data.csv")%>% 
   select(doi, reference, publication_year) %>% 
   filter(!is.na(reference)) %>% 
   glimpse()
 
+# The dataset full_data contains 9323
 full_data<- read.csv("updating_full_data.csv") %>% 
   select(-author_full_names, -cited_count) %>% 
   rename(reference = doi,
@@ -99,21 +112,25 @@ full_data<- read.csv("updating_full_data.csv") %>%
 ```
 
 ```{r}
+# Remove self citation data
 no_self_citation <- reference_info %>%
   anti_join(self_citations, by = c("doi", "reference"))
 
+# count the number of times each citation is cited.
 merged_doi <- no_self_citation %>%
   left_join(full_data, by = "reference") %>%
   group_by(reference) %>%
   mutate(cited_count = n()) %>%
   ungroup()
 
+# The dataset matched_doi contains 3229
 matched_doi <- merged_doi %>%
   filter(!is.na(single_author)) %>% 
   rename(cited_doi = reference) %>% glimpse()
 ```
 
 ```{r}
+#statistics according to the gender and race of the first author.
 cited_probability <- matched_doi %>%
   group_by(first_author_gender_bipoc) %>%
   summarize(
@@ -122,6 +139,7 @@ cited_probability <- matched_doi %>%
     cited_probability = mean(cited_count > 0)     
   )
 ```
+
 
 ```{r}
 write.csv(matched_doi, file = "updating_cleaned_reference.csv", row.names = FALSE)

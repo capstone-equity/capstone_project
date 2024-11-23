@@ -14,7 +14,6 @@ library(ggsignif)
 library(viridis)
 ```
 
-# Read data
 # Read data and clean
 ```{r}
 raw_data<- read.csv("updating_full_data.csv")
@@ -50,8 +49,7 @@ data<- raw_data %>%
                   corresponding_author_gender, corresponding_author_bipoc, 
                   corresponding_author_gender_bipoc, 
                   all_men,all_women,all_white,all_bipoc, overlap_corr_author), 
-                as.factor))  %>% 
-  glimpse()
+                as.factor))  
 
 # Centered continues factors
 data$publication_year_c <- data$publication_year - mean(data$publication_year, na.rm = T)
@@ -66,29 +64,45 @@ overlap_data<- overlap_data %>%
 ```
 
 ```{r}
+# Read author data
 author <- read.csv ("updating_gender_bipoc_data.csv") %>% 
-  select(author_full_names, publication_year, gender, bipoc) %>% 
+  dplyr::select(author_full_names, publication_year, gender, bipoc) %>% 
   na.omit()
 
-author_counts <- author %>%
+# Calculate the proportion for each group author across years
+author_prop <- author %>%
   group_by(publication_year, gender, bipoc) %>%
-  summarise(count = n()) %>%
-  ungroup()
+  summarise(count = n(), .groups = 'drop') %>%
+  group_by(publication_year) %>%
+  mutate(proportion = count / sum(count))
 ```
 
 # Visualization
-```{r}
-ggplot(author_counts, aes(x = publication_year, y = count, color = interaction(gender, bipoc))) +
-  geom_line(size = 1) +
-  labs(title = "Author Appearances Across Years by Gender and BIPOC Status",
-       x = "Publication Year",
-       y = "Number of Authors",
-       color = "Group (Gender & BIPOC)") +
-  scale_color_manual(values = c("blue", "red", "green", "purple"),
-                     labels = c("Male & Non-BIPOC", "Male & BIPOC", "Female & Non-BIPOC", "Female & BIPOC")) +
-  theme_minimal()
 
+## Proportion of Authors in Neuroscience Across Years
+```{r}
+p1<- ggplot(author_prop, aes(x = publication_year, y = proportion, fill = interaction(gender, bipoc))) +
+  geom_area(alpha = 0.9) +
+  labs(title = "Proportion of Authors in Neuroscience Across Years",
+       x = "Publication Year",
+       y = "Proportion of Authors",
+       fill = "Author Gender & Race") +
+  scale_fill_manual(values = c("#2F0F3E", "#831C63", "#E76A54", "#F9C188"),
+                    labels = c("White Man", "BIPOC Man", "White Women", "BIPOC Women")) +
+  scale_y_continuous(labels = scales::percent_format(),position = "right") +  
+  theme_bw() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+    axis.text.x = element_text(hjust = 0.5),
+    legend.title = element_text(size = 13),
+    legend.text = element_text(size = 13),
+    legend.position = "left"
+  )
+
+p1
+ggsave("proportion_area_plot.png", plot = p1, width = 10, height = 6)
 ```
+
 
 ```{r}
 m4_graph <- glm.nb(cited_count ~ first_author_gender * first_author_bipoc + last_author_gender * last_author_bipoc + publication_year + affiliation_us + fund + author_count + journal + document_type, data = overlap_data)
@@ -119,79 +133,34 @@ data_grouped <- new_data %>%
     .groups = 'drop'
   )
 
-ggplot(data_grouped, aes(x = factor(first_author_bipoc, levels = c(0, 1), labels = c("White", "BIPOC")), 
+p2<- ggplot(data_grouped, aes(x = factor(first_author_bipoc, levels = c(0, 1), labels = c("White", "BIPOC")), 
                      y = cited_count_pred, 
                      fill = factor(first_author_gender, levels = c(0, 1), labels = c("Men", "Women"))))+
   geom_bar(stat = "identity", position = position_dodge(width = 0.9)) +
   geom_errorbar(aes(ymin = cited_count_pred - se, ymax = cited_count_pred + se), 
                 position = position_dodge(width = 0.9), width = 0.25) +
   labs(
-    x = "Race",
+    x = "First Author Race",
     y = "Predicted Cited Count",
-    fill = "Gender",
+    fill = "First Author Gender",
     title = "Predicted Cited Count Based on First Author Gender and Race"
   ) +
-  scale_fill_manual(values = c("Men" = "#999999", "Women" = "#D55E50")) +  
+  scale_fill_manual(values = c("Men" = "#2F0F3E", "Women" = "#F9C188")) +  
   theme_bw() +
   theme(
     plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
     axis.text.x = element_text(hjust = 0.5),
-    legend.title = element_text(size = 12),
-    legend.text = element_text(size = 10),
-        legend.position = "top"
-  )
-```
-
-
-```{r}
-m5_graph <- glm.nb(cited_count ~ all_men * all_white + publication_year + affiliation_us + fund+ author_count + journal + document_type, data = overlap_data)
-
-new_data <- expand.grid(
-  all_men = unique(overlap_data$all_men),
-  all_white = unique(overlap_data$all_white),
-  affiliation_us = unique(overlap_data$affiliation_us),
-  publication_year = mean(overlap_data$publication_year, na.rm = T),
-  fund = unique(overlap_data$fund),
-  author_count =mean(overlap_data$author_count, na.rm = T),
-  document_type = unique(data$document_type),
-  journal = unique(overlap_data$journal)
-)
-
-predictions <- predict(m5_graph, newdata = new_data, type = "response", se.fit = TRUE)
-new_data$cited_count_pred <- predictions$fit
-new_data$se <- predictions$se.fit
-
-data_grouped <- new_data %>%
-  group_by(all_men, all_white) %>%
-  summarise(
-    cited_count_pred = mean(cited_count_pred),
-    se = mean(se)
-  )
-
-plot <- ggplot(data_grouped, aes(x = factor(all_white, levels = c(0, 1), labels = c("Not All White", "All White")), 
-                                 y = cited_count_pred, 
-                                 fill = factor(all_men, levels = c(0, 1), labels = c("Not All Men", "All Men")))) +
-  geom_bar(stat = "identity", position = position_dodge(width = 0.9)) +
-  geom_errorbar(aes(ymin = cited_count_pred - se, ymax = cited_count_pred + se), 
-                position = position_dodge(width = 0.9), width = 0.25) +
-  labs(
-    x = "Men Representation",
-    y = "Predicted Cited Count",
-    fill = "White Representation",
-    title = "Author Gender and Race vs. Citation Count"
-  ) +
-  scale_fill_manual(values = c("Not All Men" = "#E69F00", "All Men" = "#0072B2")) +  
-  theme_bw() +
-  theme(
-    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
-    axis.text.x = element_text(hjust = 0.5),
-    legend.title = element_text(size = 12),
-    legend.text = element_text(size = 10),
+    legend.title = element_text(size = 14),
+    legend.text = element_text(size = 14),
     legend.position = "top"
   )
 
-plot
+p2
+
+ggsave("FL_bar_plot.png", plot = p2, width = 10, height = 6)
 ```
+
+
 
 ```{r}
 m6_graph <- glm.nb(cited_count ~ all_women * all_bipoc + publication_year + affiliation_us + fund+ author_count + journal + document_type, data = overlap_data)
@@ -218,7 +187,7 @@ data_grouped <- new_data %>%
     se = mean(se)
   )
 
-plot<- ggplot(data_grouped, aes(x = factor(all_bipoc, levels = c(0, 1), labels = c("Not All BIPOC", "All BIPOC")), 
+p3<- ggplot(data_grouped, aes(x = factor(all_bipoc, levels = c(0, 1), labels = c("Not All BIPOC", "All BIPOC")), 
                           y = cited_count_pred, 
                           fill = factor(all_women, levels = c(0, 1), labels = c("Not All Women", "All Women")))) +
   geom_bar(stat = "identity", position = position_dodge(width = 0.9)) +
@@ -231,66 +200,20 @@ plot<- ggplot(data_grouped, aes(x = factor(all_bipoc, levels = c(0, 1), labels =
     fill = "Women Representation",
     title = "Predicted Cited Count Based on Women and BIPOC authors"
   ) +
-  scale_fill_manual(values = c("Not All Women" = "#0072B2", "All Women" = "#E69F00")) +  
+  scale_fill_manual(values = c("Not All Women" = "#2F0F3E", "All Women" = "#F9C188")) +  
   theme_bw() +
   theme(
     plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
     axis.text.x = element_text(hjust = 0.5),
-    legend.title = element_text(size = 12),
-    legend.text = element_text(size = 10),
+    legend.title = element_text(size = 14),
+    legend.text = element_text(size = 14),
         legend.position = "top"
   )
 
-plot
+
+p3
+ggsave("allwb_bar_plot.png", plot = p3, width = 10, height = 6)
 ```
-
-```{r}
-m1_graph <- glm.nb(cited_count ~ first_author_bipoc * first_author_gender + affiliation_us + publication_year + fund + author_count + journal + document_type, data = overlap_data)
-new_data <- expand.grid(
-  first_author_bipoc = unique(data$first_author_bipoc),
-  first_author_gender = unique(data$first_author_gender),
-  affiliation_us = unique(data$affiliation_us),
-  publication_year = mean(data$publication_year, na.rm = T),
-  fund = unique(data$fund),
-  author_count =mean(data$author_count, na.rm = T),
-  document_type = unique(data$document_type),
-  journal = unique(data$journal)
-)
-
-predictions <- predict(m1_graph, newdata = new_data, type = "response", se.fit = TRUE)
-new_data$cited_count_pred <- predictions$fit
-new_data$se <- predictions$se.fit
-
-data_grouped <- new_data %>%
-  group_by(first_author_bipoc, first_author_gender) %>%
-  summarise(
-    cited_count_pred = mean(cited_count_pred),
-    se = mean(se)
-  )
-
-ggplot(data_grouped, aes(x = factor(first_author_bipoc, levels = c(0, 1), labels = c("White", "BIPOC")), 
-                     y = cited_count_pred, 
-                     fill = factor(first_author_gender, levels = c(0, 1), labels = c("Men", "Women"))))+
-  geom_bar(stat = "identity", position = position_dodge(width = 0.9)) +
-  geom_errorbar(aes(ymin = cited_count_pred - se, ymax = cited_count_pred + se), 
-                position = position_dodge(width = 0.9), width = 0.25) +
-  labs(
-    x = "Race",
-    y = "Predicted Cited Count",
-    fill = "Gender",
-    title = "First Author Gender and Race vs. Citation Count"
-  ) +
-  scale_fill_manual(values = c("Men" = "#999999", "Women" = "#D55E50")) +  
-  theme_bw() +
-  theme(
-    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
-    axis.text.x = element_text(hjust = 0.5),
-    legend.title = element_text(size = 12),
-    legend.text = element_text(size = 10),
-        legend.position = "top"
-  )
-```
-
 
 ```{r}
 m2_graph <-  glm.nb(cited_count ~ last_author_bipoc * last_author_gender+ publication_year + affiliation_us + fund + document_type + author_count + journal, data = overlap_data)
@@ -317,7 +240,7 @@ data_grouped <- new_data %>%
     se = mean(se)
   )
 
-ggplot(data_grouped, aes(x = factor(last_author_bipoc, levels = c(0, 1), labels = c("White", "BIPOC")), 
+p4<-ggplot(data_grouped, aes(x = factor(last_author_bipoc, levels = c(0, 1), labels = c("White", "BIPOC")), 
                      y = cited_count_pred, 
                      fill = factor(last_author_gender, levels = c(0, 1), labels = c("Men", "Women"))))+
   geom_bar(stat = "identity", position = position_dodge(width = 0.9)) +
@@ -337,6 +260,8 @@ ggplot(data_grouped, aes(x = factor(last_author_bipoc, levels = c(0, 1), labels 
     legend.title = element_text(size = 12),
     legend.text = element_text(size = 10)
   )
+p4
+ggsave("last_bar_plot.png", plot = p4, width = 10, height = 6)
 ```
 
 
@@ -364,7 +289,7 @@ data_grouped <- new_data %>%
     se = mean(se)
   )
 
-ggplot(data_grouped, aes(x = factor(corresponding_author_bipoc, levels = c(0, 1), labels = c("White", "BIPOC")), 
+p5<-ggplot(data_grouped, aes(x = factor(corresponding_author_bipoc, levels = c(0, 1), labels = c("White", "BIPOC")), 
                      y = cited_count_pred, 
                      fill = factor(corresponding_author_gender, levels = c(0, 1), labels = c("Men", "Women"))))+
   geom_bar(stat = "identity", position = position_dodge(width = 0.9)) +
@@ -384,4 +309,7 @@ ggplot(data_grouped, aes(x = factor(corresponding_author_bipoc, levels = c(0, 1)
     legend.title = element_text(size = 12),
     legend.text = element_text(size = 10)
   )
+
+p5
+ggsave("corr_bar_plot.png", plot = p5, width = 10, height = 6)
 ```

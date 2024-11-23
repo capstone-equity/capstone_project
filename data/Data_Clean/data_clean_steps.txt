@@ -31,4 +31,4 @@ Affliation DEV: cleaned from country, coded 1 as developed economics affiliation
 
 Publication year: cleaned as 0 is 2024, and the larger the number the older the publication. (Numeric)
 
-Step5. 
+Step 5. Open updating_reference_clean.Rmd. Read "updating_cr_data.csv" and process its citation data. After a series of operations, store the result in the "reference" dataset and write it back to a new file. Read data from two author-related files respectively, merge them. Calculate the author list for each DOI based on the "reference" dataset and save it in "authors_per_doi", and then determine the self-citation data and store it in "self_citations". Read two other data files. Remove self-citation data from "reference_info" to get "no_self_citation", correlate it with "full_data" to count citation times and store in "merged_doi", and after screening and renaming, obtain "matched_doi". Group and statistically analyze relevant information according to the first author's gender and race based on "matched_doi" and store in "cited_probability", and write "matched_doi" back to a new file. 

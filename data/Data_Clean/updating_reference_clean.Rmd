@@ -112,3 +112,17 @@ matched_doi <- merged_doi %>%
   filter(!is.na(single_author)) %>% 
   rename(cited_doi = reference) %>% glimpse()
 ```
+
+```{r}
+cited_probability <- matched_doi %>%
+  group_by(first_author_gender_bipoc) %>%
+  summarize(
+    total_papers = n(),                       
+    cited_papers = sum(cited_count > 0),          
+    cited_probability = mean(cited_count > 0)     
+  )
+```
+
+```{r}
+write.csv(matched_doi, file = "updating_cleaned_reference.csv", row.names = FALSE)
+```

@@ -75,10 +75,12 @@ brain_gender<- raw_brain %>%
 
 # Predict race based on last name and merge with gender data
 ```{r}
-jocn <- jocn %>% rename(surname = last_name)
+jocn <- jocn %>% 
+  rename(surname = last_name) %>% 
+  select()
 
 # Predict race
-race_jocn <- predict_race(raw_jocn, surname.only = TRUE)
+race_jocn <- predict_race(jocn, surname.only = TRUE)
 
 # Recode probability under 70% as NA
 predicted_jocn <- race_jocn %>%

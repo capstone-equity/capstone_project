@@ -87,8 +87,8 @@ p1<- ggplot(author_prop, aes(x = publication_year, y = proportion, fill = intera
        x = "Publication Year",
        y = "Proportion of Authors",
        fill = "Author Gender & Race") +
-  scale_fill_manual(values = c("#2F0F3E", "#831C63", "#E76A54", "#F9C188"),
-                    labels = c("White Man", "BIPOC Man", "White Women", "BIPOC Women")) +
+  scale_fill_manual(values = c("#e6e6f0", "#dbc6d9", "#9f6693", "#4f3e6a"),
+                    labels = c("White Man", "BIPOC Man", "White Woman", "BIPOC Woman")) +
   scale_y_continuous(labels = scales::percent_format(),position = "right") +  
   theme_bw() +
   theme(
@@ -145,7 +145,7 @@ p2<- ggplot(data_grouped, aes(x = factor(first_author_bipoc, levels = c(0, 1), l
     fill = "First Author Gender",
     title = "Predicted Cited Count Based on First Author Gender and Race"
   ) +
-  scale_fill_manual(values = c("Men" = "#2F0F3E", "Women" = "#F9C188")) +  
+  scale_fill_manual(values = c("Men" = "#5e6777", "Women" = "#ccd4dd")) +  
   theme_bw() +
   theme(
     plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
@@ -200,7 +200,7 @@ p3<- ggplot(data_grouped, aes(x = factor(all_bipoc, levels = c(0, 1), labels = c
     fill = "Women Representation",
     title = "Predicted Cited Count Based on Women and BIPOC authors"
   ) +
-  scale_fill_manual(values = c("Not All Women" = "#2F0F3E", "All Women" = "#F9C188")) +  
+  scale_fill_manual(values = c("Not All Women" = "#e6e6f0", "All Women" = "#9f6693")) +  
   theme_bw() +
   theme(
     plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),

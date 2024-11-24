@@ -83,7 +83,7 @@ author_prop <- author %>%
 ```{r}
 p1<- ggplot(author_prop, aes(x = publication_year, y = proportion, fill = interaction(gender, bipoc))) +
   geom_area(alpha = 0.9) +
-  labs(title = "Proportion of Authors in Neuroscience Across Years",
+  labs(title = "Proportion of Authors in Neuroscience Publication Across Years",
        x = "Publication Year",
        y = "Proportion of Authors",
        fill = "Author Gender & Race") +

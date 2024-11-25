@@ -106,6 +106,13 @@ data<- jocn %>%
   filter(reprint_addresses!="") %>% 
   glimpse()
 write.csv(data, file = "raw_author_data.csv")
+
+author_distinct<- data %>% 
+  filter(!is.na(reprint_addresses)) %>%   
+  filter(reprint_addresses!="") %>% 
+  filter(publication_year > 2009) %>% 
+  filter(document_type == "Review" | document_type == "Article") %>% 
+  distinct(author_full_names) 
 ```
 # Merge race and gender
 ```{r}

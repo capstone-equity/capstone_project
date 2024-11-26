@@ -110,7 +110,7 @@ write.csv(data, file = "raw_author_data.csv")
 author_distinct<- data %>% 
   filter(!is.na(reprint_addresses)) %>%   
   filter(reprint_addresses!="") %>% 
-  filter(publication_year > 2009) %>% 
+  filter(publication_year >= 2009) %>% 
   filter(document_type == "Review" | document_type == "Article") %>% 
   distinct(author_full_names) 
 ```
@@ -126,7 +126,8 @@ merged_data <- data %>%
   left_join(name_data, by = "author_full_names") %>% 
   distinct()
 ```
-# Mixed gender and race
+
+# Code publications with same group members
 ```{r}
 summary_data <- merged_data %>%
   group_by(doi) %>%

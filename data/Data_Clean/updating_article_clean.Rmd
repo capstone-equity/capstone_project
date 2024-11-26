@@ -26,13 +26,13 @@ raw_nature_neuroscience <- read.csv("cleaned_nature_neuro.csv") %>%
 raw_brain <- read.csv("cleaned_brain.csv") %>% 
   mutate(journal = "brain") 
 
-# Total of 9,207 publications
+# Total of 9,873 publications
 raw_data<- raw_jocn %>% 
   bind_rows(raw_nature_neuroscience)%>% 
   bind_rows(raw_brain)%>%
   filter(!is.na(reprint_addresses)) %>%   
   filter(reprint_addresses!="") %>% 
-  filter(publication_year > 2009) %>% 
+  filter(publication_year >= 2009) %>% 
   filter(document_type == "Review" | document_type == "Article") %>% 
   glimpse()
 
@@ -1339,7 +1339,7 @@ merged_clean_data <- merged_clean_data %>%
   )  %>% 
   select(-both_match, -none_match,-first_author_last_name,-last_author_last_name, -corresponding_author, -first_author, -last_author)
 
-#write.csv(merged_clean_data, file= "updating_cr_data.csv")
+write.csv(merged_clean_data, file= "updating_cr_data.csv")
 ```
 
 # Recode rest of the info
@@ -1352,5 +1352,6 @@ full_data<- merged_clean_data %>%
   select(-article_title, -reprint_addresses,-funding_orgs) %>% 
   glimpse()
 
+# Total of 9,994 obs
 write.csv(full_data, file = "updating_full_data.csv", row.names = FALSE)
 ```

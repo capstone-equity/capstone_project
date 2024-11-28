@@ -11,13 +11,10 @@ library(conflicted)
 conflict_prefer("collapse", "dplyr")
 conflict_prefer("select", "dplyr")
 library(tidyverse)
-library(mgcv)
 library(MASS)
 library(car)
 library(effectsize)
 library(emmeans)
-library(pscl)
-library(lmtest)
 ```
 
 # Read data and clean
@@ -73,213 +70,129 @@ overlap_data<- overlap_data %>%
 # Model fitting
 ## First author gender and race models
 ```{r}
-# Full data
-model1_1 <- glm.nb(cited_count ~ first_author_bipoc * first_author_gender + publication_year_c + affiliation_us + fund + author_count_c + journal+ document_type, data = data)
-
-# Data with only overlapped corresponding author
-model1_2 <- glm.nb(cited_count ~ first_author_bipoc * first_author_gender + publication_year_c + affiliation_us + fund + author_count_c + journal+ document_type, data = overlap_data)
-```
-
-### AIC comparison, lower AIC represents better model fitting
-```{r}
-aic_1_1 <- AIC(model1_1)
-aic_1_2 <- AIC(model1_2)
-
-cat("AIC for 1_1 model:", aic_1_1, "\n")
-cat("AIC for 1_2 model:", aic_1_2, "\n")
+model1<- glm.nb(cited_count ~ first_author_bipoc * first_author_gender + publication_year_c + affiliation_us + fund + author_count_c + journal+ document_type, data = overlap_data)
 ```
 
 ### Residual Plots
 ```{r}
-plot(model1_2)
+plot(model1)
 ```
 
 ### Summary of model
 ```{r}
-#summary(model1_1)
-summary(model1_2)
+summary(model1)
 ```
 ## Last author gender and race models
 ```{r}
-# Full data
-model2_1 <- glm.nb(cited_count ~ last_author_bipoc * last_author_gender + publication_year_c + affiliation_us + fund + author_count_c + journal+ document_type, data = data)
-
-# Data with only overlapped corresponding author
-model2_2 <- glm.nb(cited_count ~ last_author_bipoc * last_author_gender + publication_year_c + affiliation_us + fund + author_count_c + journal+ document_type, data = overlap_data)
-```
-
-### AIC comparison, lower AIC represents better model fitting
-```{r}
-aic_2_1 <- AIC(model2_1)
-aic_2_2 <- AIC(model2_2)
-
-cat("AIC for 2_1 model:", aic_2_1, "\n")
-cat("AIC for 2_2 model:", aic_2_2, "\n")
+model2 <- glm.nb(cited_count ~ last_author_bipoc * last_author_gender + publication_year_c + affiliation_us + fund + author_count_c + journal+ document_type, data = overlap_data)
 ```
 
 ### Residual Plots
 ```{r}
-plot(model2_2)
+plot(model2)
 ```
 
 ### Summary of model
 ```{r}
-#summary(model2_1)
-summary(model2_2)
+summary(model2)
 ```
 
 ## Corresponding author gender and race models
 ```{r}
-# Full data
-model3_1 <- glm.nb(cited_count ~ corresponding_author_bipoc * corresponding_author_gender + publication_year_c + affiliation_us + fund + author_count_c + journal + document_type, data = data)
-
-# Data with only overlapped corresponding author
-model3_2 <- glm.nb(cited_count ~ corresponding_author_bipoc * corresponding_author_gender + publication_year_c + affiliation_us + fund + author_count_c + journal + document_type, data = overlap_data)
-```
-
-### AIC comparison, lower AIC represents better model fitting
-```{r}
-aic_3_1 <- AIC(model3_1)
-aic_3_2 <- AIC(model3_2)
-
-cat("AIC for 3_1 model:", aic_3_1, "\n")
-cat("AIC for 3_2 model:", aic_3_2, "\n")
+model3 <- glm.nb(cited_count ~ corresponding_author_bipoc * corresponding_author_gender + publication_year_c + affiliation_us + fund + author_count_c + journal + document_type, data = overlap_data)
 ```
 
 ### Residual Plots
 ```{r}
-plot(model3_2)
+plot(model3)
 ```
 
 ### Summary of model
 ```{r}
-#summary(model3_1)
-summary(model3_2)
+summary(model3)
 ```
 
 ## First + Last author gender and race models
 ```{r}
-# Full data
-model4_1 <- glm.nb(cited_count ~ first_author_gender * first_author_bipoc + last_author_gender * last_author_bipoc + publication_year_c + affiliation_us + fund + author_count_c + journal + document_type, data = data)
-
-# Data with only overlapped corresponding author
-model4_2 <- glm.nb(cited_count ~ first_author_gender * first_author_bipoc + last_author_gender * last_author_bipoc + publication_year_c + affiliation_us + fund + author_count_c + journal + document_type, data = overlap_data)
-```
-
-### AIC comparison, lower AIC represents better model fitting
-```{r}
-aic_4_1 <- AIC(model4_1)
-aic_4_2 <- AIC(model4_2)
-
-cat("AIC for 4_1 model:", aic_4_1, "\n")
-cat("AIC for 4_2 model:", aic_4_2, "\n")
+model4 <- glm.nb(cited_count ~ first_author_gender * first_author_bipoc + last_author_gender * last_author_bipoc + publication_year_c + affiliation_us + fund + author_count_c + journal + document_type, data = overlap_data)
 ```
 
 ### Residual Plots
 ```{r}
-plot(model4_2)
+plot(model4)
 ```
 
 ### Summary of model
 ```{r}
-#summary(model4_1)
-summary(model4_2)
-est<- cbind(Estimate = coef(model4_2), confint(model4_2))
+summary(model4)
+est<- cbind(Estimate = coef(model4), confint(model4))
 exp(est)
 ```
 Intercept: 
-The intercept represents the expected log number of cited count when all predictor variables are set to zero. After transformation, exp(3.99) ≈ 54.05, When a publication is review published in brain in 2016 with funding, the first and last author are both White men, and the affiliation of the corresponding author is from the US, the predicted cited count is 54.05.
+The intercept represents the expected log number of cited count when all predictor variables are set to zero. After transformation, exp(4.02) ≈ 55.86, When a publication is review published in brain in 2016 with funding, the first and last author are both White men, and the affiliation of the corresponding author is from the US, the predicted cited count is 55.86.
 
-The coefficient on first author gender indicates the expected change in the log number of cited count between man and woman, holding other variables constant. A negative estimate of -0.05 suggests that woman first author tend to have fewer cited count compared to man authors. After transformation, exp(-0.05) ≈ 0.95, which means that being women is associated with about a 5% lower expected number of cited count compared to man.
+The coefficient on first author gender indicates the expected change in the log number of cited count between man and woman, holding other variables constant. A negative estimate of -0.07 suggests that woman first author tend to have fewer cited count compared to man authors. After transformation, exp(-0.07) ≈ 0.94, which means that being women is associated with about a 6% lower expected number of cited count compared to man.
+
+The coefficient on first author BIPOC indicates the expected change in the log number of cited count between White and BIPOC, holding other variables constant. A negative estimate of -0.14 suggests that BIPOC first author tend to have fewer cited count compared to White authors. After transformation, exp(-0.14) ≈ 0.86, which means that being BIPOC is associated with about a 14% lower expected number of cited count compared to White.
 
 The coefficient on last author gender indicates the expected change in the log number of cited count between man and woman, holding other variables constant. A negative estimate of -0.05 suggests that woman last author tend to have fewer cited count compared to man authors. After transformation, exp(-0.05) ≈ 0.95, which means that being women is associated with about a 4% lower expected number of cited count compared to man.
 
-The coefficient on first author BIPOC indicates the expected change in the log number of cited count between White and BIPOC, holding other variables constant. A negative estimate of -0.13 suggests that BIPOC first author tend to have fewer cited count compared to White authors. After transformation, exp(-0.12) ≈ 0.87, which means that being BIPOC is associated with about a 13% lower expected number of cited count compared to White.
-
 The coefficient on last author BIPOC indicates the expected change in the log number of cited count between White and BIPOC, holding other variables constant. A negative estimate of -0.04 suggests that BIPOC last author tend to have fewer cited count compared to White authors. After transformation, exp(-0.04) ≈ 0.96, which means that being BIPOC is associated with about a 4% lower expected number of cited count compared to White.
 
-The coefficient on centered publication year suggests the expected change in the log number of cited count for a one-unit increase in mean publication year, holding other variables constant. The estimate of 0.20 means that older publication are associated with more cited count. After transformation, exp(0.20) ≈ 1.22, similarly indicating about a 22% increase in expected cited count for each one-unit increase in mean publication year.
+The coefficient on centered publication year suggests the expected change in the log number of cited count for a one-unit increase in mean publication year, holding other variables constant. The estimate of 0.19 means that older publication are associated with more cited count. After transformation, exp(0.19) ≈ 1.21, similarly indicating about a 21% increase in expected cited count for each one-unit increase in mean publication year.
 
 The coefficient on US affiliation suggests the expected change in the log number of cited count between US affiliation and non-US affiliation, holding other variables constant. The estimate of 0.15 means that US affiliation publication to have more cited count compared to publication from non-US affiliation. After transformation, exp(0.15) ≈ 1.16, which means that US affiliation publication is associated with about a 16% higher expected number of cited count compared to non-US affiliation publication.
 
-The coefficient on fund suggests the expected change in the log number of cited count between funded publication and unfunded publication, holding other variables constant. The estimate of 0.13 means that funded publication tend to have more cited count compared to unfunded publications. After transformation, exp(0.13) ≈ 1.15, similarly indicating about a 15% increase in expected cited count in funded publications.
+The coefficient on fund suggests the expected change in the log number of cited count between funded publication and unfunded publication, holding other variables constant. The estimate of 0.16 means that funded publication tend to have more cited count compared to unfunded publications. After transformation, exp(0.16) ≈ 1.18, similarly indicating about a 18% increase in expected cited count in funded publications.
 
 The coefficient on author count suggests the expected change in the log number of cited count for a one-unit increase in mean author number, holding other variables constant. The estimate of 0.02 means that more author are associated with slightly more cited count. After transformation, exp(0.02) ≈ 1.02, similarly indicating about a 2% increase in expected cited count for each one-unit increase in mean author number.
 
-The coefficient on document type suggests the expected change in the log number of cited count between reviews and articles, holding other variables constant. The estimate of 0.72 means that articles tend to have fewer cited count compared to reviews. After transformation, exp(0.72) ≈ 2.05, which means that article is associated with about a 104% lower expected number of cited count compared to review.
+The coefficient on document type suggests the expected change in the log number of cited count between reviews and articles, holding other variables constant. The estimate of 0.73 means that articles tend to have fewer cited count compared to reviews. After transformation, exp(0.73) ≈ 2.09, which means that article is associated with about a 104% lower expected number of cited count compared to review.
 
 
-### Estimated Marginal Means
+### Pairwise Comparisons
 ```{r}
-emm4 <- emmeans(model4_2, ~ first_author_gender:first_author_bipoc)
+emm4 <- emmeans(model4, ~ first_author_gender:first_author_bipoc)
+emm4
 pairs4 <- pairs(emm4,adjust = "bonferroni")
 summary(pairs4)
 ```
 
 ## All MEN and All WHITE author models
 ```{r}
-# Full data
-model5_1 <- glm.nb(cited_count ~ all_men * all_white + publication_year_c + affiliation_us + fund+ author_count_c + journal+document_type, data = data)
-
-# Data with only overlapped corresponding author
-model5_2 <- glm.nb(cited_count ~ all_men * all_white + publication_year_c + affiliation_us + fund + author_count_c + journal + document_type, data = overlap_data)
-```
-
-### AIC comparison, lower AIC represents better model fitting
-```{r}
-aic_5_1 <- AIC(model5_1)
-aic_5_2 <- AIC(model5_2)
-
-cat("AIC for 5_1 model:", aic_5_1, "\n")
-cat("AIC for 5_2 model:", aic_5_2, "\n")
+model5 <- glm.nb(cited_count ~ all_men * all_white + publication_year_c + affiliation_us + fund + author_count_c + journal + document_type, data = overlap_data)
 ```
 
 ### Residual Plots
 ```{r}
-plot(model5_2)
+plot(model5)
 ```
 
 ### Summary of model
 ```{r}
-#summary(model5_1)
-summary(model5_2)
-est<- cbind(Estimate = coef(model5_2), confint(model5_2))
-exp(est)
+summary(model5)
 ```
 
 ## All WOMEN and ALL BIPOC author models
 ```{r}
-# Full data
-model6_1 <- glm.nb(cited_count ~ all_women * all_bipoc + publication_year_c + affiliation_us + fund+ author_count_c + journal + document_type, data = data)
-
-# Data with only overlapped corresponding author
-model6_2 <- glm.nb(cited_count ~ all_women * all_bipoc + publication_year_c + affiliation_us + fund + author_count_c + journal + document_type, data = overlap_data)
-```
-
-### AIC comparison, lower AIC represents better model fitting
-```{r}
-aic_6_1 <- AIC(model6_1)
-aic_6_2 <- AIC(model6_2)
-
-cat("AIC for 6_1 model:", aic_6_1, "\n")
-cat("AIC for 6_2 model:", aic_6_2, "\n")
+model6 <- glm.nb(cited_count ~ all_women * all_bipoc + publication_year_c + affiliation_us + fund + author_count_c + journal + document_type, data = overlap_data)
 ```
 
 ### Residual Plots
 ```{r}
-plot(model6_2)
+plot(model6)
 ```
 
 ### Summary of model
 ```{r}
-#summary(model6_1)
-summary(model6_2)
-est<- cbind(Estimate = coef(model6_2), confint(model6_2))
+summary(model6)
+est<- cbind(Estimate = coef(model6), confint(model6))
 exp(est)
 ```
 ### Estimated Marginal Means
 ```{r}
-emm6 <- emmeans(model6_2, ~ all_women : all_bipoc)
+emm6 <- emmeans(model6, ~ all_women : all_bipoc)
+emm6
 pairs6 <- pairs(emm6,adjust = "bonferroni")
 summary(pairs6)
 ```

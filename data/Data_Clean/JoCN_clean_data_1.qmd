@@ -1,0 +1,539 @@
+---
+title: "JoCN_clean_data_1"
+author: "Yanchi Liu"
+date: "2024-11-18"
+output: html_document
+---
+
+```{r conflicts}
+options(conflicts.policy = "depends.ok")
+devtools::source_url("https://github.com/jjcurtin/lab_support/blob/main/fun_ml.R?raw=true")
+tidymodels_conflictRules()
+```
+
+```{r}
+#| message: false
+#| warning: false
+devtools::source_url("https://github.com/jjcurtin/lab_support/blob/main/fun_eda.R?raw=true")
+devtools::source_url("https://github.com/jjcurtin/lab_support/blob/main/fun_plots.R?raw=true")
+```
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(readxl)
+
+theme_set(theme_classic()) 
+library(janitor, include.only = "clean_names") # <1>
+library(cowplot, include.only = "plot_grid") # <2> 
+library(kableExtra, exclude = "group_rows") # you may or may not use this one!
+library(tidyverse) # for general data wrangling
+library(tidymodels) # for modeling
+library(dplyr)
+
+
+path_data <- "data/JoCN Metadata"
+```
+
+# Read in data
+```{r}
+library(purrr)
+file_path <- here::here(path_data, "JoCNMetaDataAll.xlsx")
+
+# Step 2: Get all sheet names
+# Dynamically fetch all sheet names from the Excel file
+sheet_names <- excel_sheets(file_path)
+
+# Step 3: Read and combine all sheets
+# Iterate over all sheet names, read data, and handle inconsistent column types
+data_all_combined <- sheet_names |> 
+  map_dfr(~ {
+    # Print a message to indicate progress (optional)
+    message("Processing sheet: ", .x)
+    
+    # Read the data from the current sheet
+    read_excel(file_path, sheet = .x) |> 
+      # Handle specific column issues dynamically (e.g., EP and BP columns)
+      mutate(across(c(EP, BP), ~ if (is.numeric(.)) as.character(.) else .))
+  })
+
+# Step 4: Inspect the combined data
+# Use glimpse to check the structure of the final data frame
+glimpse(data_all_combined)
+
+```
+
+# Choose the data that need to be use
+```{r}
+new_data <- data_all_combined |>
+  select(AU, PY, DT, TC, C1, C3, FU) |>
+  glimpse()
+
+```
+
+# Rename Selected Columns & remove the data which publication year is earlier 2009
+```{r}
+new_data <- data_all_combined |>
+  select(AU, PY, DT, Z9, C1, C3, FU) |> 
+    rename(
+    jocn_author_name = AU,
+    jocn_publication_year = PY,
+    jocn_document_type = DT,
+    jocn_times_cited = Z9,
+    jocn_address = C1,
+    jocn_affiliation = C3,
+    jocn_funding_orgs = FU
+  ) 
+
+# remove publication year before 2009
+
+new_data <- new_data |>
+  filter(jocn_publication_year >= 2009) |>
+  glimpse()
+```
+# Check if there are any NA's
+```{r}
+new_data |> 
+  skim_some() |> 
+  select(skim_variable, n_missing, complete_rate)
+```
+
+# Check specific na's 
+```{r}
+
+missing_brain_affiliation <- which(is.na(new_data$jocn_affiliation))
+missing_brain_affiliation
+
+new_data |> 
+  filter(is.na(jocn_affiliation))
+```
+
+# Extract affiliation from address
+```{r}
+new_data <- new_data |> 
+  mutate(
+    jocn_manual_affiliation = str_remove_all(jocn_address, "\\[.*?\\]"),
+    jocn_manual_affiliation = str_split(jocn_manual_affiliation, ";"),
+    jocn_manual_affiliation = map(jocn_manual_affiliation,
+                                  ~ map_chr(.x, ~ str_trim(str_split(.x, ",")[[1]][1]))),
+    jocn_manual_affiliation = map(jocn_manual_affiliation, unlist),
+    jocn_manual_affiliation = map(jocn_manual_affiliation, unique),
+    jocn_manual_affiliation_count = map(jocn_manual_affiliation, length),
+    jocn_manual_affiliation_binary = if_else(jocn_manual_affiliation_count == 1, 0, 1)
+  )
+
+# check missing value
+new_data |> 
+  filter(is.na(jocn_manual_affiliation))
+```
+
+
+# Recode funding_orgs to 0: NA(no value/fundings) and 1: have values(fundings)
+```{r}
+new_data <- new_data |> 
+  mutate(jocn_funding_orgs_binary = if_else(is.na(jocn_funding_orgs), 0, 1))
+```
+
+# Adding avriable: "author_count" from author_name
+```{r}
+new_data$jocn_author_count <- sapply(strsplit(as.character(new_data$jocn_author_name), ";"), length)
+new_data
+
+# check if any author_count == 0
+new_data |> 
+  filter(jocn_author_count == 0)
+```
+
+# Remove brackets in 'jocn_address' and form it into a new column called 'jocn_extracted_address'
+```{r}
+
+new_data <- new_data |>
+  mutate(jocn_extracted_address = str_remove_all(jocn_address, "\\[.*?\\]"))
+
+```
+
+# rotate through every segment in 'jocn_extracted_last', split each by commas, and remove everything in the segment except the last 
+```{r}
+new_data <- new_data |>
+  mutate(
+    jocn_extracted_last = jocn_extracted_address |>
+      str_split(";"))
+
+new_data <- new_data |> 
+  mutate(jocn_extracted_last = sapply(jocn_extracted_last, function(x) {
+    # Split the string by semicolons first to handle multiple segments
+    segments <- unlist(strsplit(x, ";\\s*"))
+    
+    # For each segment, split by commas and keep only the last part
+    cleaned_segments <- sapply(segments, function(seg) {
+      parts <- unlist(strsplit(seg, ",\\s*"))
+      tail(parts, 1) # Extract the last part
+    })
+    
+    # Combine the cleaned segments back into a single string with semicolons
+    paste(cleaned_segments, collapse = "; ")
+  }))
+
+```
+
+# Using 'countrycode' and 'countries' packages to identify address and form into 'brain_extracted_country' column (BOOST VERSION -- ADDING PARALLEL PROCESSING)
+```{r}
+library(countrycode)
+library(countries)
+library(furrr)
+countrycode(c('USA'), origin = 'iso3c', destination = 'cown')
+
+all_country <- countryname_dict %>%
+  filter(grepl('[A-Za-z]', country.name.en)) %>% # Filter out non-ASCII country names
+  pull(country.name.en) %>%                      # Convert to a vector
+  tolower()                                      # Convert to lower-case
+
+# Create a regex pattern to match any country name
+pattern <- str_c(all_country, collapse = '|')
+
+# Using Parallel processing 
+plan(multisession, workers = 8) # Use 8 cores to process data
+
+
+# Assuming 'new_data' is your data frame and 'jocn_extracted_last' is the column containing addresses
+new_data <- new_data |>
+  mutate(jocn_extracted_last = str_replace_all(jocn_extracted_last, "USA", "United States of America"),
+         jocn_extracted_last = str_replace_all(jocn_extracted_last, "England", "United Kingdom"),
+         jocn_extracted_last = str_replace_all(jocn_extracted_last, "Scotland", "United Kingdom"),
+         jocn_extracted_last = str_replace_all(jocn_extracted_last, "U Arab Emirates", "United Arab Emirates"),
+         jocn_extracted_last = str_replace_all(jocn_extracted_last, "Wales", "United Kingdom")) |> 
+  # Extract country name matches
+  # mutate(brain_extracted_country = str_extract_all(tolower(brain_address), pattern))
+  
+  # Use "future_map" function to extract country name matches
+  mutate(jocn_extracted_country = future_map(jocn_extracted_last, ~ str_extract_all(tolower(.x), pattern)))
+```
+
+
+# Remove "list(c ())" in "jocn_extracted_country" 
+```{r}
+new_data <- new_data |>
+  mutate(jocn_extracted_country = sapply(jocn_extracted_country, function(x) {
+    if (length(x) == 0 || is.null(x)) {
+      return(NA)  # Replace empty lists with NA
+    } else {
+      return(paste(unique(x), collapse = "; "))  # Flatten list and remove duplicates, if needed
+    }
+  }))
+
+
+new_data$jocn_extracted_country <- gsub('c\\(|"|\\)', '', new_data$jocn_extracted_country)
+
+```
+
+# Check specific NA's 
+```{r}
+missing_jocn_extracted_country <- which(is.na(new_data$jocn_extracted_country))
+missing_jocn_extracted_country
+```
+
+# Check if there are any NA's
+```{r}
+new_data |> 
+  skim_some() |> 
+  select(skim_variable, n_missing, complete_rate)
+```
+
+# Remove repeated countries 'jocn_extracted_country
+```{r}
+# Remove duplicates within each row of 'jocn_extracted_country'
+new_data$jocn_extracted_country <- sapply(new_data$jocn_extracted_country, function(x) {
+  # Split the string by commas
+  countries <- unlist(strsplit(x, ",\\s*"))
+  # Keep only unique countries
+  unique_countries <- unique(countries)
+  # Combine back into a single string
+  paste(unique_countries, collapse = ", ")
+})
+
+# Convert back to a data frame if needed
+new_data <- as.data.frame(new_data)
+```
+
+# Check if there are still any repeated contries in 'jocn_extracted_country'
+```{r}
+# Function to check for repeated countries
+check_repeats <- function(x) {
+  countries <- unlist(strsplit(x, ";"))  # Split the string by semicolon
+  unique_countries <- unique(trimws(countries))  # Remove duplicates and extra spaces
+  return(length(countries) != length(unique_countries))  # Check if lengths differ
+}
+
+# Apply the function to check for repeats in 'brain_extracted_country'
+repeated_rows <- which(sapply(new_data$jocn_extracted_country, check_repeats))
+
+# Output the result
+if (length(repeated_rows) > 0) {
+  cat("Rows with repeated countries in 'brain_extracted_country':\n")
+  print(new_data$jocn_extracted_country[repeated_rows])
+} else {
+  cat("No repeated countries found in 'brain_extracted_country'.\n")
+}
+```
+
+# Add a new column "jocn_country_binary": more than 1 country = 1, only one country = 0
+```{r}
+new_data$jocn_country_binary <- sapply(new_data$jocn_extracted_country, function(x) {
+  # Split the countries by semicolon and remove any extra white space
+  countries <- unique(trimws(unlist(strsplit(x, ","))))
+  # Check if there are more than 1 unique country
+  if (length(countries) > 1) {
+    return(1)  # More than one country
+  } else {
+    return(0)  # Only one country
+  }
+})
+
+# View the modified data
+View(new_data)
+```
+
+# Add a new column "brain_country_count"
+```{r}
+# Counts for the affiliation from jocn_affiliation
+new_data <- new_data |> 
+  mutate(
+    jocn_country_count = str_count(jocn_extracted_country, ",") + 1 # Count semicolons and add 1
+  )
+```
+
+# Visuliztion for "jocn_country_count"
+```{r}
+hist(new_data$jocn_country_count)
+```
+
+# Check
+```{r}
+new_data |> janitor::tabyl(jocn_country_count)
+```
+
+# Save it as .RDS
+```{r}
+getwd()
+saveRDS(new_data, file = "/Users/ycl/Desktop/capstone1/jocn_clean_data.rds")
+```
+
+# Read .RDS
+```{r}
+new_data <- readRDS("/Users/ycl/Desktop/capstone1/jocn_clean_data.rds")
+view(new_data)
+skimr::skim(new_data)
+```
+
+# Check if there are any NA's in dataset agian
+```{r}
+new_data |> 
+  skim_some() |> 
+  select(skim_variable, n_missing, complete_rate)
+```
+
+# Remove repeated affiliation in 'jocn_affiliation'
+```{r}
+# Remove repeated affiliations in 'brain_affiliation'
+new_data$jocn_affiliation <- sapply(new_data$jocn_affiliation, function(x) {
+  # Split the affiliations by a delimiter (e.g., ";")
+  affiliations <- unlist(strsplit(x, ";"))
+  # Remove duplicates and extra spaces
+  unique_affiliations <- unique(trimws(affiliations))
+  # Combine unique affiliations back into a single string
+  return(paste(unique_affiliations, collapse = "; "))
+})
+```
+
+
+# Check if there are any repeated affiliation in 'jocn_affliation'
+```{r}
+# Check if there are repeated affiliations in 'brain_affiliation'
+repeated_affiliations <- sapply(new_data$jocn_affiliation, function(x) {
+  # Split the affiliations by a delimiter (e.g., ";")
+  affiliations <- unlist(strsplit(x, ";"))
+  # Remove extra spaces
+  affiliations <- trimws(affiliations)
+  # Check if any duplicates exist
+  return(length(affiliations) > length(unique(affiliations)))
+})
+
+# Find rows with repeated affiliations
+rows_with_repeats <- which(repeated_affiliations)
+
+# Display the rows with repeated affiliations
+new_data[rows_with_repeats, ]
+```
+
+# Search from "afiliation" column, create a new list of strings contains "university" and "system" called "system_affiliations"
+```{r}
+
+# Extract unique parts containing "system" from the semicolon-separated affiliations
+system_affiliations <- new_data |>
+  filter(str_detect(jocn_affiliation, regex("system", ignore_case = TRUE))) |> # Filter rows with "system"
+  pull(jocn_affiliation) |> # Extract affiliation column
+  str_split(";") |> # Split by semicolon
+  unlist() |> # Flatten into a single vector
+  str_trim() # Trim whitespace
+
+# Keep only parts containing "system" and get unique values
+system_affiliations <- unique(system_affiliations[str_detect(system_affiliations, regex("system", ignore_case = TRUE))])
+
+# Print the result
+print(system_affiliations)
+
+```
+
+# In "affiliation" column, remove same strings pattern from "system_affiliations", and hard coding for SUNY and CUNY system.
+```{r}
+
+# Combine the list into a single pattern, separated by |
+pattern <- paste(system_affiliations, collapse = "|")
+
+# Use the pattern to remove all matches in the jocn_affiliation column
+new_data <- new_data |>
+  mutate(jocn_affiliation = str_remove_all(jocn_affiliation, pattern = paste0("(", pattern, ");?")))
+
+
+
+# Remove the specific string from the jocn_affiliation column
+new_data <- new_data |>
+  mutate(jocn_affiliation = str_remove(jocn_affiliation, "State University of New York \\(SUNY\\) System;|City University of New York \\(CUNY\\) System;|Vet Affairs Puget Sound Health Care System;|Atlantic Health System;|VA Boston Healthcare System;|Children's National Health System;|VA Connecticut Healthcare System;|Sinai Health System Toronto;"))
+
+# View the result
+head(new_data)
+
+```
+
+# based on "jocn_affiliation", create new column "jocn_no_duplicate_affiliation"
+```{r}
+# Remove duplicate brain_affiliation within each semicolon-separated entry
+new_data <- new_data |>
+  mutate(jocn_no_duplicate_affiliation = jocn_affiliation |>
+           # Split brain_affiliation by ";", remove duplicates, and recombine
+           str_split(";") |>
+           lapply(function(x) unique(trimws(x))) |>
+           sapply(paste, collapse = "; "))
+```
+
+# check and count if there are still duplicate affiliations
+```{r}
+jocn_no_duplicate_affiliations <- new_data |>
+  group_by(jocn_affiliation) |>
+  filter(n() > 1) |>
+  summarise(count = n())
+
+print(jocn_no_duplicate_affiliations)
+```
+
+# Creat "jocn_affiliation_binary" 0:One affliation; 1: more than one affliation
+```{r}
+new_data <- new_data |> 
+  mutate(jocn_affiliation_binary = if_else(
+    str_count(jocn_affiliation, ";") > 0, 1, 0
+  ))
+```
+
+# Visulization for "jocn_affiliation_binary"
+```{r}
+hist(new_data$jocn_affiliation_binary)
+```
+
+# Check
+```{r}
+new_data |> janitor::tabyl(jocn_affiliation_binary)
+```
+
+# Visulization for not recode as 0 and 1
+```{r}
+# Counts for the affiliation from jocn_affiliation
+new_data <- new_data |> 
+  mutate(
+    jocn_affiliation_count = str_count(jocn_affiliation, ";") + 1 # Count semicolons and add 1
+  )
+
+hist(new_data$jocn_affiliation_count)
+```
+
+# Check
+```{r}
+new_data |> janitor::tabyl(jocn_affiliation_count)
+```
+
+# Compare manually coded affiliation and raw affiliation
+```{r}
+new_data |> 
+  select(jocn_address, jocn_affiliation, jocn_manual_affiliation, 
+         jocn_manual_affiliation_count, jocn_affiliation_count) |> 
+  filter(jocn_manual_affiliation_count != jocn_affiliation_count) |> 
+  glimpse()
+```
+
+# Remove the raw affiliation
+```{r}
+new_data <- new_data |> 
+  mutate(
+    jocn_no_duplicate_affiliation = jocn_manual_affiliation,
+    jocn_affiliation_binary = jocn_manual_affiliation_binary,
+    jocn_affiliation_count = jocn_manual_affiliation_count
+  ) |> 
+  select(-jocn_manual_affiliation, -jocn_manual_affiliation_binary,
+         -jocn_manual_affiliation_count)
+```
+
+# Remove unnecessary columns, reorder and rename columns
+```{r}
+jocn_data <- new_data |>
+  select(jocn_author_name, jocn_author_count, jocn_publication_year, jocn_document_type, jocn_no_duplicate_affiliation, jocn_affiliation_binary, jocn_affiliation_count, jocn_extracted_address, jocn_extracted_country, jocn_country_binary, jocn_country_count, jocn_times_cited, jocn_funding_orgs, jocn_funding_orgs_binary) |>
+  rename(
+    author_name = jocn_author_name,
+    author_count = jocn_author_count,
+    publication_year = jocn_publication_year,
+    document_type = jocn_document_type,
+    no_duplicate_affiliation = jocn_no_duplicate_affiliation,
+    affiliation_binary = jocn_affiliation_binary,
+    affiliation_count = jocn_affiliation_count,
+    extracted_address = jocn_extracted_address,
+    extracted_country = jocn_extracted_country,
+    country_binary = jocn_country_binary,
+    country_count = jocn_country_count,
+    times_cited = jocn_times_cited,
+    founding_orgs = jocn_funding_orgs,
+    founding_orgs_binary = jocn_funding_orgs_binary
+  ) |>
+  glimpse()
+```
+
+# clean document_type: delete "proceedings paper" and "retracted article":
+```{r}
+jocn_data <- jocn_data |>
+  filter(!grepl("Proceedings Paper", document_type) &
+         !grepl("Retracted Publication", document_type))
+
+
+```
+
+# Write.csv
+```{r}
+jocn_data <- jocn_data |>
+  mutate(no_duplicate_affiliation = sapply(no_duplicate_affiliation, function(x) {
+    if (length(x) == 0 || is.null(x)) {
+      return(NA)  # Replace empty lists with NA
+    } else {
+      return(paste(unique(x), collapse = "; "))  # Flatten list and remove duplicates, if needed
+    }
+  })) |> 
+  mutate(affiliation_count = unlist(affiliation_count)) |> 
+  glimpse()
+
+```
+
+
+```{r}
+getwd()
+write_csv(jocn_data, here::here(path_data, "jocn_cleaned.csv"))
+
+```
+
+
+
+

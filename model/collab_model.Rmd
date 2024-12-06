@@ -17,14 +17,17 @@ library(gamlss)
 # Read data
 
 ## Publication-level data
+
 ```{r}
 publication_data<- read.csv("updating_full_data.csv") 
 ```
 
 ## Author-level data
+
 ```{r}
 raw_author_data<- read.csv("updating_gender_bipoc_data.csv") 
 
+# Correct class to factor and remove duplicate authors
 author_data<- raw_author_data%>% 
   mutate(bipoc = as.factor(bipoc),
          gender = as.factor(gender)) %>% 
@@ -44,7 +47,7 @@ author_exclude<- author_data %>%
   ungroup() %>%                        
   select(-author_rank)
 
-# Don't exclude
+# Don't exclude any author
 author<- author_data %>% 
   group_by(doi) %>%
   mutate(author_rank = row_number()) %>% 
@@ -52,7 +55,7 @@ author<- author_data %>%
   ungroup() %>%                        
   select(-author_rank)
 
-# Calculate the actual count 
+# Calculate the actual count in all publications
 author_prop <- author %>%
   group_by(publication_year, gender, bipoc) %>%
   summarise(count = n(), .groups = 'drop') %>%
@@ -62,15 +65,17 @@ author_prop <- author %>%
 # Calculate women proportion in overall
 overall_women_proportion <- sum(author_prop$count[author_prop$gender == 1], na.rm = TRUE) /
   sum(author_prop$count, na.rm = TRUE)
+#37%
 
 # Calculate BIPOC proportion in overall
 overall_bipoc_proportion <- sum(author_prop$count[author_prop$bipoc == 1], na.rm = TRUE) /
   sum(author_prop$count, na.rm = TRUE)
+#25%
 ```
 
-The overall_women_proportion represents among all publication from 200
+The overall_women_proportion represents among all publication from 2009-2024.
 
-## First author collaboation
+## First author & collaboation
 
 ```{r}
 # Calculate the women and BIPOC proportion after excluding first author
@@ -99,12 +104,12 @@ data <- publication_data %>%
 
 #colSums(is.na(data)) # Check NAs
 
-# Center data
+# Center data for data analysis
 data$publication_year_c <- data$publication_year - mean(data$publication_year, na.rm = T)
 data$author_count_c <- data$author_count - mean(data$author_count, na.rm = T)
 ```
 
-## Last author collaboration
+## Last author & collaboration
 
 ```{r}
 # Calculate the women and BIPOC proportion after excluding last author
@@ -134,7 +139,7 @@ data_last <- publication_data %>%
 
 #colSums(is.na(data_last)) # Check NAs
 
-# Center data
+# Center data for data analysis
 data_last$publication_year_c <- data_last$publication_year - mean(data_last$publication_year, na.rm = T)
 data_last$author_count_c <- data_last$author_count - mean(data_last$author_count, na.rm = T)
 ```
@@ -142,6 +147,7 @@ data_last$author_count_c <- data_last$author_count - mean(data_last$author_count
 # EDA
 
 ## Author gender and BIPOC distribution in overall
+
 ```{r}
 ggplot(data, aes(x = women_prop)) +
   geom_histogram(binwidth = 0.1, fill = "#7F8993", color = "black") +
@@ -159,57 +165,74 @@ ggplot(data_last, aes(x = bipoc_prop)) +
   geom_histogram(binwidth = 0.1, fill = "#dbc6d9", color = "black") +
   labs(x = "Proportion of BIPOC Authors", y = "Number of Publications") 
 ```
+
 Heavy on tails (0 and 1), so I choose GAM with Beta-inflated distribution or GLM with quasibinomial distribution for data analysis. 
 
 # Model fitting
+
 ```{r}
+# GAM with Beta-inflated distribution
+
+## Effect of first author gender and race on Women Proportion in each Publication, controlling effect of character of publications
 m1_1 <- gamlss(women_prop ~ first_author_gender * first_author_bipoc + 
                publication_year_c + fund + author_count_c + 
                document_type + affiliation_us + journal, family=BEINF, data=data)
 
+## Effect of first author gender and race on BIPOC Proportion in each Publication, controlling effect of character of publications
 m2_1 <- gamlss(bipoc_prop ~ first_author_gender * first_author_bipoc + 
                publication_year_c + fund + author_count_c + 
                document_type + affiliation_us + journal, family=BEINF, data=data)
 
+## Effect of last author gender and race on Women Proportion in each Publication, controlling effect of character of publications
 m3_1 <- gamlss(women_prop ~ last_author_gender * last_author_bipoc + 
                publication_year_c + fund + author_count_c + 
                document_type + affiliation_us + journal, family=BEINF, data=data_last)
 
+## Effect of last author gender and race on BIPOC Proportion in each Publication, controlling effect of character of publications
 m4_1 <- gamlss(bipoc_prop ~ last_author_gender * last_author_bipoc + 
                publication_year_c + fund + author_count_c + 
                document_type + affiliation_us + journal, family=BEINF, data=data_last)
 
+# GLM with quasibinomial distribution
+
+## Effect of first author gender and race on Women Proportion in each Publication, controlling effect of character of publications
 m1_2 <- glm(women_prop ~ first_author_gender * first_author_bipoc + 
                publication_year_c + fund + author_count_c + 
                document_type + affiliation_us + journal, 
              family = quasibinomial(link = "logit"), data = data)
 
+## Effect of first author gender and race on BIPOC Proportion in each Publication, controlling effect of character of publications
 m2_2 <- glm(bipoc_prop ~ first_author_gender * first_author_bipoc + 
                publication_year_c + fund + author_count_c + 
                document_type + affiliation_us + journal, 
              family = quasibinomial(link = "logit"), data = data)
 
+## Effect of last author gender and race on Women Proportion in each Publication, controlling effect of character of publications
 m3_2 <- glm(women_prop ~ last_author_gender * last_author_bipoc + 
                publication_year_c + fund + author_count_c + 
                document_type + affiliation_us + journal, 
              family = quasibinomial(link = "logit"), data = data_last)
 
-m3_2 <- glm(bipoc_prop ~ last_author_gender * last_author_bipoc + 
+## Effect of last author gender and race on BIPOC Proportion in each Publication, controlling effect of character of publications
+m4_2 <- glm(bipoc_prop ~ last_author_gender * last_author_bipoc + 
                publication_year_c + fund + author_count_c + 
                document_type + affiliation_us + journal, 
              family = quasibinomial(link = "logit"), data = data_last)
 ```
+
 ## Model comparison
 
-### plots
+### Plots
 ```{r}
 plot(m1_1) 
 plot(m1_2) 
-
 # m1_1 looks better
 ```
+
 ### RMSE with cross-validation
+
 ```{r}
+# Set values
 set.seed(123) 
 k_folds <- 5
 folds <- cut(seq(1, nrow(data)), breaks = k_folds, labels = FALSE)
@@ -217,7 +240,7 @@ folds <- cut(seq(1, nrow(data)), breaks = k_folds, labels = FALSE)
 rmse_gamlss <- numeric(k_folds)
 rmse_glm <- numeric(k_folds)
 
-# Cross-validation
+# Loop for CV
 for (i in 1:k_folds) {
   test_indices <- which(folds == i, arr.ind = TRUE)
   train_data <- data[-test_indices, ]
@@ -244,19 +267,43 @@ for (i in 1:k_folds) {
 }
 
 avg_rmse_gamlss <- mean(rmse_gamlss)
+# 0.26
 avg_rmse_glm <- mean(rmse_glm)
-
-cat("Average RMSE for GAMLSS model:", avg_rmse_gamlss, "\n")
-cat("Average RMSE for GLM model:", avg_rmse_glm, "\n")
+# 0.25
 ```
-Although the GLM has lower RMSE, compare to the plot, I will use GAM in the following.
+Although the GLM has lower RMSE, compare to the plot, I will use GAM in the following analysis.
 
+### Summary for model 1
 
 ```{r}
 summary(m1_1)
-summary(m2_1)
 ```
+ 
+After transformation, intercept is the baseline proportion of women proportion is approximately 38.5% when all predictors are at their reference levels.
+
+The coefficient on first author gender indicates the publications with a woman first author have an 11.7% higher proportion of women authors compared to publication with a man first author.
+
+The coefficient on first author BIPOC indicates the publications with a BIPOC first author have a 5.2% lower proportion of women authors compared to White first authors. 
+
+The coefficient on centered publication year suggests for each additional year, the proportion of women authors in each publication increases by 1.1%.
+
+The coefficient on US affiliation suggests publications from U.S.-based affiliations do not show a significant difference in the proportion of women authors.
+
+The coefficient on fund suggests whether an publication is funded or not does not significantly affect the proportion of women authors
+
+The coefficient on author count suggests the number of authors does not have a significant impact on the proportion of women authors.
+
+The coefficient on document type suggests Review show no significant difference in the proportion of women authors compared to Article.
+
+Publications in JoCN have a 5.7% higher BIPOC proportion compared to Brain, and publications in Nature Neuroscience have a 0.97% higher BIPOC proportion compared to Brain. The first one was significant but the latter one was not.
+
+The coefficient on interaction term indicate there is no significant difference.
+
+
+#### Visualization for model 1
+
 ```{r}
+# Bar plot for first author gender and race effect on women proportion
 m1_graph <- gamlss(women_prop ~ first_author_gender * first_author_bipoc + 
                publication_year + fund + author_count + 
                document_type + affiliation_us + journal, family=BEINF, data=data)
@@ -310,6 +357,7 @@ ggsave("gender_collab_bar.png", plot = p1, width = 10, height = 6)
 ```
 
 ```{r}
+# Line plot for first author gender and race effect over years on women proportion
 predictions_summary_year <- results %>%
   group_by(first_author_gender, first_author_bipoc, publication_year = data$publication_year) %>%
   summarise(
@@ -320,40 +368,69 @@ predictions_summary_year <- results %>%
 
 p1_year <- ggplot(predictions_summary_year, 
              aes(x = publication_year, y = mean_pred, 
-                 color = factor(first_author_bipoc, levels = c(0, 1), 
-                                labels = c("White", "BIPOC")),
-                 linetype = factor(first_author_gender, levels = c(1, 0), 
-                                   labels = c("Woman", "Man")))) +
-  geom_line(size = 1) +
+                 linetype = factor(first_author_bipoc, levels = c(0, 1), 
+                                   labels = c("White", "BIPOC")),
+                 color = factor(first_author_gender, levels = c(1, 0), 
+                                labels = c("Woman", "Man")))) +
+  geom_line(size = 1.5) +
   geom_ribbon(aes(ymin = mean_pred - sd_pred, ymax = mean_pred + sd_pred, 
-                  fill = factor(first_author_bipoc, levels = c(0, 1), 
-                                labels = c("White", "BIPOC"))), 
-              alpha = 0.1, color = NA) +
+                  fill = factor(first_author_gender, levels = c(1, 0), 
+                                labels = c("Woman", "Man"))), 
+              alpha = 0.07, color = NA) +
   labs(
     x = "Publication Year",
     y = "Predicted Women Proportion",
-    color = "First Author Race",
-    linetype = "First Author Gender",
-    fill = "First Author Race",
+    color = "First Author Gender",
+    fill = "First Author Gender",
+    linetype = "First Author Race",
     title = "Predicted Women Proportion Over Years"
   ) +
-  scale_color_manual(values = c("White" = "#7F8993", "BIPOC" = "#dbc6d9")) +
-  scale_fill_manual(values = c("White" = "#7F8993", "BIPOC" = "#dbc6d9")) +
+  scale_color_manual(values = c("Woman" = "#ccd4dd", "Man" = "#5e6777")) +
+  scale_fill_manual(values = c("Woman" = "#ccd4dd", "Man" = "#5e6777")) +
   theme_bw() +
   theme(
     plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
-    axis.text.x = element_text(hjust = 0.5, size = 12),
-    legend.title = element_text(size = 14),
-    legend.text = element_text(size = 12),
-    legend.position = "top"
+    axis.text.x = element_text(size = 12),
+    legend.title = element_text(size = 13),
+    legend.text = element_text(size = 11),
+    legend.position = "right"
   )
 
 ggsave("gender_collab_year.png", plot =p1_year, width = 10, height = 6)
 p1_year
 ```
 
+### Summary for model 2
 
 ```{r}
+summary(m2_1)
+```
+
+After transformation, intercept is the baseline proportion of BIPOC proportion is approximately 25.2% when all predictors are at their reference levels.
+
+The coefficient on first author gender indicates publications with a woman first author have a lower BIPOC proportion by 1.8%, compared to publications with a man first author, but this effect is not statistically significant.
+
+The coefficient on first author BIPOC indicates that publications with a BIPOC first author have a 17.5% higher BIPOC proportion compared to publications with a White first author, holding other variables constant.
+
+The coefficient on centered publication year suggests for each additional year, the proportion of BIPOC authors in each publication increases by 0.9%.
+
+The coefficient on US affiliation indicates that publications with authors affiliated in the US have a 4.0% higher BIPOC proportion compared to non-US affiliations.
+
+The coefficient on fund suggests whether an publication is funded or not does not significantly affect the proportion of BIPOC authors.
+
+The coefficient on author count suggests indicates that for each additional author from the mean of author number, the BIPOC proportion decreases by 1.1%.
+
+The coefficient on document type suggests Review show no significant difference in the proportion of BIPOC authors compared to Article.
+
+Publications in JoCN have a 6.8% higher BIPOC proportion compared to Brain, and publications in Nature Neuroscience have a 6.7% higher BIPOC proportion compared to Brain.
+
+The coefficient for interaction effect suggests that the combination of a woman first author and a BIPOC first author is associated with a 3.4% lower BIPOC proportion compared to the expected additive effect. 
+
+
+#### Visualization for model 2
+
+```{r}
+# Bar plot for first author gender and race effect on BIPOC proportion
 m2_graph <- gamlss(bipoc_prop ~ first_author_gender * first_author_bipoc + 
                publication_year + fund + author_count + 
                document_type + affiliation_us + journal, family=BEINF, data=data)
@@ -406,7 +483,10 @@ p2
 
 ggsave("race_collab_bar.png", plot = p2, width = 10, height = 6)
 ```
+
+
 ```{r}
+# Line plot for first author gender and race effect on BIPOC proportion
 predictions_summary_year <- results %>%
   group_by(first_author_gender, first_author_bipoc, publication_year = data$publication_year) %>%
   summarise(
@@ -417,15 +497,15 @@ predictions_summary_year <- results %>%
 
 p2_year <- ggplot(predictions_summary_year, 
              aes(x = publication_year, y = mean_pred, 
-                 linetype = factor(first_author_bipoc, levels = c(1, 0), 
-                                labels = c("BIPOC", "White")),
-                 color= factor(first_author_gender, levels = c(0, 1), 
-                                   labels = c("Man", "Woman")))) +
-  geom_line(size = 1) +
+                 linetype = factor(first_author_bipoc, levels = c(0, 1), 
+                                labels = c("White", "BIPOC")),
+                 color= factor(first_author_gender, levels = c(1, 0), 
+                                labels = c("Woman", "Man")))) +
+  geom_line(size = 1.5) +
   geom_ribbon(aes(ymin = mean_pred - sd_pred, ymax = mean_pred + sd_pred, 
-                  fill = factor(first_author_gender, levels = c(0, 1), 
-                                   labels = c("Man", "Woman"))), 
-              alpha = 0.1, color = NA) +
+                  fill = factor(first_author_gender, levels = c(1, 0), 
+                                labels = c("Woman", "Man"))), 
+              alpha = 0.07, color = NA) +
   labs(
     x = "Publication Year",
     y = "Predicted BIPOC Proportion",
@@ -434,21 +514,21 @@ p2_year <- ggplot(predictions_summary_year,
     fill = "First Author Gender",
     title = "Predicted BIPOC Proportion Over Years"
   ) +
-  scale_color_manual(values = c("Man" = "#1e1e1e", "Woman" = "#ccd4dd")) +
-  scale_fill_manual(values = c("Man" = "#1e1e1e", "Woman" = "#ccd4dd")) +
+  scale_color_manual(values = c("Woman" = "#ccd4dd", "Man" = "#5e6777")) +
+  scale_fill_manual(values = c("Woman" = "#ccd4dd", "Man" = "#5e6777")) +
   theme_bw() +
   theme(
     plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
-    axis.text.x = element_text(hjust = 0.5, size = 12),
-    legend.title = element_text(size = 14),
-    legend.text = element_text(size = 12),
-    legend.position = "top"
+    axis.text.x = element_text(size = 12),
+    legend.title = element_text(size = 13),
+    legend.text = element_text(size = 11),
+    legend.position = "right"
   )
 
 ggsave("bipoc_collab_year.png", plot =p2_year, width = 10, height = 6)
 p2_year
 ```
-
+### Summary for model 3&4
 
 ```{r}
 summary(m3_1)
@@ -457,6 +537,8 @@ summary(m4_1)
 
 
 ```{r}
+# Line plot for last author gender and race effect on women proportion
+
 m3_graph <- gamlss(women_prop ~ last_author_gender * last_author_bipoc + 
                publication_year + fund + author_count + 
                document_type + affiliation_us + journal, family=BEINF, data=data_last)
@@ -510,6 +592,8 @@ ggsave("gender_collab_last_bar.png", plot = p3, width = 10, height = 6)
 ```
 
 ```{r}
+# Line plot for last author gender and race effect on women proportion
+
 predictions_summary_year <- results %>%
   group_by(last_author_gender, last_author_bipoc, publication_year = data_last$publication_year) %>%
   summarise(
@@ -554,6 +638,8 @@ p3_year
 
 
 ```{r}
+# Bar plot for last author gender and race effect on BIPOC proportion
+
 m4_graph <- gamlss(bipoc_prop ~ last_author_gender * last_author_bipoc + 
                publication_year + fund + author_count + 
                document_type + affiliation_us + journal, family=BEINF, data=data_last)
@@ -606,7 +692,10 @@ p4
 
 ggsave("race_collab_last_bar.png", plot = p4, width = 10, height = 6)
 ```
+
 ```{r}
+# Line plot for last author gender and race effect on BIPOC proportion
+
 predictions_summary_year <- results %>%
   group_by(last_author_gender, last_author_bipoc, publication_year = data_last$publication_year) %>%
   summarise(

@@ -296,9 +296,31 @@ p5<- ggplot(data_grouped, aes(x = factor(first_author_bipoc, levels = c(0, 1),
     legend.position = "top"
   )
 
+# Create significance data with all necessary columns
+sig_data <- data.frame(
+  x = 1.5,
+  y = max(data_grouped$cited_count_pred + data_grouped$se) * 1.1,
+  first_author_gender = factor(1, levels = c(0, 1), labels = c("Men", "Women")),  # adding this to match aesthetic mapping
+  first_author_bipoc = factor(0, levels = c(0, 1), labels = c("White", "BIPOC"))  # adding this to match aesthetic mapping
+)
+
+p5_1<- p5 + 
+  geom_text(data = sig_data, 
+            aes(x = x, y = y),
+            label = "p < .001",
+            size = 5,
+            inherit.aes = FALSE) +  
+  geom_segment(data = sig_data,
+              aes(x = 1, xend = 2,
+                  y = y * 0.95, yend = y * 0.95),
+              inherit.aes = FALSE) + 
+  scale_y_continuous(limits = c(0, max(data_grouped$cited_count_pred + data_grouped$se) * 1.2))
+
 p5
+p5_1
 
 ggsave("FL_bar_plot.png", plot = p5, width = 10, height = 6)
+ggsave("FL_bar_plot_sig.png", plot = p5_1, width = 10, height = 6)
 ```
 
 

@@ -1,0 +1,43 @@
+﻿Part One: Overview of The Project
+
+
+The overall goal of this project is to examine how the relationship between country-level collaboration (national vs. international) and the number of collaborating countries are related to citation counts. Three neuroscience journals used in this study: JoCN(Journal of Cognitive Neuroscience), Brain, Nature Neuroscience. 
+
+
+Part Two: Code Book Explanation
+
+
+For each part of the project, I used different files to organize the structure of coding. 
+
+
+JoCN_clean_data_1.qmd: The steps of clean JoCN data.
+
+
+Brain_data_cleaning.qmd: The steps of clean Brain data.
+
+
+Nature_neuroscience_data_cleaning.qmd: The steps of clean Nature neuroscience data.
+
+
+Merged_data_final_version.qmd: Merged three cleaned journal data in one, including visualizations, model fit. 
+
+
+Extracted_country: Extracted country data from the address column in the original dataset using a country code package. 
+
+
+Country_count: Measure the number of collaborating countries per article.
+
+
+Country_binary: Recoded as 0: single country collaboration; 1: multiple country collaborations. 
+
+
+Affiliation_binray: Extracted affiliation data from the affiliation column in the original dataset by strings, record as 0: single affiliation; 1: multiple affiliations
+
+
+Affiliation_count: Measure the number of collaborating affiliations per article.
+
+
+Founding_orgs_binary: recode as 0: no founding; 1: has founding. 
+
+
+Journal: with adding the new column to specify the name of each journal.

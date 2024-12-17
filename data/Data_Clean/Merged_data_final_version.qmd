@@ -1,0 +1,2383 @@
+---
+title: "merged_data_visuilization_model_fit"
+author: "Yanchi Liu"
+date: "2024-11-18"
+format: html
+editor: visual
+---
+
+## Set up
+
+1.  Library Packeges
+
+```{r}
+options(conflicts.policy = "depends.ok")
+theme_set(theme_classic())
+library("tidyverse")
+# install.packages("sf")
+library("sf")
+# install.packages("rnaturalearth")
+library("rnaturalearth")
+# install.packages("countrycode")
+library("countrycode")
+# install.packages("ggrepel")
+library("ggrepel")
+# install.packages("ggplot2")
+library("ggplot2")
+# library("package:purrr", unload = TRUE)
+# library("maps")
+# install.packages('ggiraph')
+library(ggiraph)
+# install.packages('dplyr')
+library(dplyr)
+# detach("package:dplyr", unload = TRUE)
+# install.packages('patchwork')
+library(patchwork)
+# install.packages('tidyr')
+library(tidyr) 
+library(janitor, include.only = "clean_names") # <1>
+library(cowplot, include.only = "plot_grid") # <2> 
+library(kableExtra, exclude = "group_rows") # you may or may not use this one!
+
+
+
+jocn_data <- "cleaned_data"
+path_data <- "cleaned_data"
+```
+
+# read data
+
+```{r}
+jocn_data <- read.csv(here::here(jocn_data, "jocn_cleaned.csv")) |> 
+  janitor::clean_names() |>
+  mutate(journal = 'jocn') |>
+  glimpse()
+
+nature_data <- read.csv(here::here(path_data, "natrue_cleaned.csv")) |>
+  janitor::clean_names() |>
+  mutate(journal = 'nature_neuroscience') |>
+  glimpse()
+
+brain_data <- read_csv(here::here(path_data, "brain_cleaned.csv")) |>
+  janitor::clean_names() |>
+  mutate(journal = 'brain') |>
+  glimpse()
+
+
+
+merged_data <- bind_rows(brain_data, jocn_data, nature_data)
+
+
+skimr::skim(merged_data)
+glimpse(merged_data)
+
+```
+
+## Creat id
+
+```{r}
+merged_data <- merged_data |>
+  mutate(id = row_number()) |>
+  relocate(id, .before = everything()) |>
+  glimpse()
+```
+
+## Convert integer variables to numeric
+
+```{r}
+merged_data <- merged_data |>
+  mutate(
+    author_count = as.numeric(author_count),
+    publication_year = as.numeric(publication_year),
+    affiliation_count = as.numeric(affiliation_count),
+    country_count = as.numeric(country_count),
+    times_cited = as.numeric(times_cited),
+    founding_orgs_binary = as.numeric(founding_orgs_binary),
+    country_binary = as.factor(country_binary),
+    affiliation_binary = as.factor(affiliation_binary)
+  ) |>
+  glimpse()
+```
+
+## Convert character variables to factors
+
+```{r}
+merged_data <- merged_data |>
+  mutate(
+    author_name = as.factor(author_name),
+    document_type = as.factor(document_type),
+    no_duplicate_affiliation = as.factor(no_duplicate_affiliation),
+    extracted_address = as.factor(extracted_address),
+    extracted_country = as.factor(extracted_country),
+    founding_orgs = as.factor(founding_orgs),
+    journal = as.factor(journal),
+  ) |>
+  glimpse()
+```
+
+# Descrptive Statistics
+#### Count the number of papers for single-country (0) and multiple-country (1)
+
+```{r}
+# Count the number of papers for single-country (0) and multiple-country (1)
+paper_counts <- merged_data |>
+  dplyr::count(country_binary)
+
+print(paper_counts)
+```
+
+
+#### Count the number of each journal:
+
+```{r}
+journal_count <- merged_data |>
+  dplyr::count(journal)
+
+print(journal_count)
+```
+
+#### See the deatils of journal that country_count >= 10
+
+```{r}
+# Filter and select the required columns
+filtered_data <- merged_data |>
+  filter(country_count >= 10 & journal %in% c("brain", "jocn", "nature_neuroscience")) |>
+  select(journal, country_count, times_cited)
+
+# View the resulting tibble
+filtered_data
+```
+
+#### The most cited papers with 10 or more collaborating countries:
+
+```{r}
+# Filter papers with 10 or more collaborating countries
+highly_collab_papers <- merged_data[merged_data$country_count >= 10, ]
+
+# Sort by citations in descending order
+top_cited <- highly_collab_papers[order(highly_collab_papers$times_cited, decreasing = TRUE), ]
+
+# Display top results with relevant columns
+print("Most cited papers with 10+ collaborating countries:")
+head(top_cited[, c("journal", "country_count", "times_cited")])
+```
+
+```{r}
+# Filter data for Brain journal and arrange by country count and citations
+brain_collaborations <- merged_data |>
+  filter(journal == "brain") |>
+  arrange(desc(times_cited)) |>
+  select(country_count, times_cited) |>
+  head(10)
+
+# Print the results
+print(brain_collaborations)
+
+# Get the single highest count
+highest_collab <- merged_data |>
+  filter(journal == "brain") |>
+  summarize(
+    max_countries = max(country_count),
+    citations_for_max = times_cited[which.max(country_count)]
+  )
+
+print(highest_collab)
+```
+
+
+### Visulization of Merged_data (Still Descriptive Statistics)
+
+### histgram for times_cited
+
+```{r}
+hist(merged_data$times_cited, 
+     breaks = 100,  # Set the number of bins
+     main = "Histogram of Times Cited",
+     xlab = "Times Cited",
+     col = "lightblue",  # Optional: Add color
+     border = "black")   # Optional: Add border color
+```
+
+### Average Citations by Country Count and Journal
+
+```{r}
+# Calculate average citations by country_count and journal
+average_citations <- merged_data |>
+  group_by(country_count, journal) |>
+  summarize(avg_citations = mean(times_cited, na.rm = TRUE))
+
+# Assign custom colors to journal types
+custom_colors <- c("#a8759e", "#d1c8c7", "#7f8993")
+
+# Create the line chart
+ggplot(average_citations, aes(x = country_count, y = avg_citations, color = journal)) +
+  geom_line(linewidth = 1) +  # Add lines for each journal
+  geom_point(size = 2) +  # Add raw data points
+  scale_color_manual(values = custom_colors) +  # Use custom colors
+  labs(
+    title = "Average Citations by Country Count and Journal",
+    x = "Country Count",
+    y = "Average Citations",
+    color = "Journal"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "top"
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5)  # Center the title
+  )
+```
+
+### Country_binary bar plot
+
+```{r}
+# Summarize data, including journal
+summary_data <- merged_data |>
+  dplyr::group_by(country_binary, journal) |>  # Include journal in the grouping
+  dplyr::summarize(mean_times_cited = mean(times_cited, na.rm = TRUE), .groups = "drop")
+
+# Create the faceted bar plot with custom colors
+ggplot(summary_data, aes(x = as.factor(country_binary), y = mean_times_cited, fill = as.factor(country_binary))) +
+  geom_bar(stat = "identity") +
+  labs(
+    x = "Country Binary (0: Single Country, 1: Multiple Countries)",
+    y = "Average Times Cited",
+    title = "Relationship Between Country Binary and Times Cited by Journal"
+  ) +
+  scale_fill_manual(
+    values = c("0" = "#7f8993", "1" = "#ba94b2"),  # Assign colors
+    labels = c("0: Single Country", "1: Multiple Countries")  # Optional: labels for legend
+  ) +
+  facet_wrap(~journal) +  # Facet by journal
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5)  # Center the title
+  )
+
+```
+
+```{r}
+# Summarize data, including journal
+summary_data <- merged_data |> 
+  dplyr::group_by(country_binary, journal) |>  # Include journal in the grouping
+  dplyr::summarize(mean_times_cited = mean(times_cited, na.rm = TRUE), .groups = "drop")
+
+# Create the faceted bar plot with custom colors
+ggplot(summary_data, aes(x = journal, y = mean_times_cited, fill = journal)) +
+  geom_bar(stat = "identity") +
+  labs(
+    x = "Journal",
+    y = "Average Times Cited",
+    title = "Citations by Journal"
+  ) +
+  scale_fill_manual(values = c("#bec7d4", "#a8759e", "#dac9db")) +  # Provide three colors
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14),  # Center and size the title
+    axis.text = element_text(size = 10),  # Adjust axis text size
+    axis.title = element_text(size = 12)  # Adjust axis title size
+  )
+
+
+
+```
+
+```{r}
+# Summarize data, including journal
+summary_data <- merged_data |> 
+  dplyr::group_by(country_binary, journal) |>  # Include journal in the grouping
+  dplyr::summarize(mean_country_count = mean(country_count, na.rm = TRUE), .groups = "drop")
+
+# Create the faceted bar plot with custom colors
+ggplot(summary_data, aes(x = journal, y = mean_country_count, fill = journal)) +
+  geom_bar(stat = "identity") +
+  labs(
+    x = "Journal",
+    y = "Average Collaboration Count Between Countries",
+    title = "Country Collaboration by Journal"
+  ) +
+  scale_fill_manual(values = c("#bec7d4", "#a8759e", "#dac9db")) +  # Provide three colors
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14),  # Center and size the title
+    axis.text = element_text(size = 10),  # Adjust axis text size
+    axis.title = element_text(size = 12)  # Adjust axis title size
+  )
+```
+
+### World map for the most single country through all of three journals
+
+```{r}
+# select the top 10 single countries
+top_single_countries <- merged_data |>
+  filter(country_binary == 0) |>  # Filter for single countries
+  group_by(extracted_country) |>  # Group by country
+  summarise(total_citations = sum(times_cited, na.rm = TRUE)) |>  # Sum citations per country
+  arrange(desc(total_citations)) |>  # Sort by total citations
+  slice_head(n = 10)  # Select the top 10 rows
+print(top_single_countries)
+
+# plot the bar graph
+p_single_country_1 <- ggplot(top_single_countries, aes(x = reorder(extracted_country, total_citations), y = total_citations)) +
+  geom_bar(stat = "identity", fill = "#dac9d8") +
+  coord_flip() + # Flip coordinates for better visualization
+  labs(
+    title = "Top 10 Country Level Collaborations by Total Times Cited",
+    x = "Country Collaboration",
+    y = "Total Times Cited"
+  ) +
+  theme_minimal()
+p_single_country_1
+
+
+
+# Opption 1: Plot the bar graph with text annotations
+p_single_country_1 <- ggplot(top_single_countries, 
+                             aes(x = reorder(extracted_country, total_citations), 
+                                 y = total_citations)) +
+  geom_bar(stat = "identity", fill = "#dac9d8") +  # Bar plot
+  geom_text(aes(label = total_citations),         # Add exact values
+            hjust = -0.1,                         # Position text slightly outside the bars
+            size = 4) +                           # Text size
+  coord_flip() +                                  # Flip coordinates
+  labs(
+    title = "Top 10 Country Level Collaborations by Total Times Cited",
+    x = "Country Collaboration",
+    y = "Total Times Cited"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))   # Center-align the title
+
+p_single_country_1
+
+# opption 2:
+p <- ggplot(top_single_countries, aes(x = extracted_country, y = total_citations)) +
+  geom_segment(aes(xend = extracted_country, y = 0, yend = total_citations),  # Draw segments
+               color = "black", size = 0.5) +
+  geom_point(size = 4, color = "orange") +  # Add points
+  coord_flip() +  # Flip coordinates for horizontal bars
+  theme_bw() +  # Use a clean theme
+  labs(
+    title = "Top 10 Single Countries by Total Citations",
+    x = "",
+    y = "Total Citations"
+  )
+
+# Display the plot
+print(p)
+```
+
+### World map for the most citaions countries (R graph gallery)
+
+```{r}
+# Get the map
+map('world',col="darkgrey", fill=TRUE, bg="white", lwd=0.05, mar=rep(0,4),border=0, ylim=c(-80,80) )
+
+# set seed
+set.seed(123)
+
+# select variables from "merged_data" and creat a new data
+top_countries <- merged_data |> 
+  group_by(extracted_country) |> 
+  summarise(total_times_cited = sum(times_cited, na.rm = TRUE)) |>  # Sum citations per country
+  arrange(desc(total_times_cited)) |> 
+  slice_head(n = 10) # Select top 10 countries
+
+# Plot the bar graph
+p1 <- ggplot(top_countries, aes(x = reorder(extracted_country, total_times_cited), y = total_times_cited)) +
+  geom_bar(stat = "identity", fill = "#dac9d8") +
+  coord_flip() + # Flip coordinates for better visualization
+  labs(
+    title = "Top 10 Country Level Collaborations by Total Times Cited",
+    x = "Country Collaboration",
+    y = "Total Times Cited"
+  ) +
+  theme_minimal()
+p1
+```
+
+### World map : Collabrations
+
+#### (Top 10 countries pairs) Most frequent collaborations
+
+```{r}
+# Step 1: Convert `extracted_country` to character
+merged_data <- merged_data |> 
+  mutate(extracted_country = as.character(extracted_country))
+
+# Step 2: Filter for valid `extracted_country` and restrict to specific journals
+merged_data <- merged_data |> 
+  filter(
+    !is.na(extracted_country) & 
+    extracted_country != "" & 
+    journal %in% c("jocn", "brain", "nature_neuroscience") # Filter for the three journals
+  )
+
+# Step 3: Separate rows for country occurrences
+long_countries <- merged_data |> 
+  separate_rows(extracted_country, sep = ", ") |> # Adjust the separator based on actual data format
+  select(id, extracted_country)
+
+# Debugging print
+print(long_countries)
+
+# Step 4: Create unique country collaboration pairs
+country_cooccurrence <- long_countries |> 
+  inner_join(long_countries, by = "id") |> 
+  filter(extracted_country.x < extracted_country.y) |> # Ensure unique combinations
+  count(extracted_country.x, extracted_country.y) |> 
+  rename(Country1 = extracted_country.x, Country2 = extracted_country.y, Cooccurrence = n)
+
+# Debugging print
+print(country_cooccurrence)
+
+# Step 5: Select the top 10 collaborations
+top10_country_pairs <- country_cooccurrence |> 
+  arrange(desc(Cooccurrence)) |> 
+  slice_head(n = 10)
+
+# Final output
+print(top10_country_pairs)
+
+```
+
+```{r}
+# Load required packages
+# library(maps)
+# library(igraph)
+
+plot_country_network <- function(collaboration_data) {
+  # Create country mapping
+  country_mapping <- c(
+    "united kingdom" = "UK",       # Changed to uppercase
+    "united states" = "USA",       # Changed to uppercase
+    "germany" = "GERMANY",         # Changed to uppercase
+    "canada" = "CANADA",           # Changed to uppercase
+    "france" = "FRANCE",           # Changed to uppercase
+    "italy" = "ITALY",             # Changed to uppercase
+    "netherlands" = "NETHERLANDS", # Changed to uppercase
+    "china" = "CHINA"              # Changed to uppercase
+  )
+
+  # Update country names
+  collaboration_data$Country1 <- country_mapping[tolower(collaboration_data$Country1)]
+  collaboration_data$Country2 <- country_mapping[tolower(collaboration_data$Country2)]
+
+  # Create network
+  g <- igraph::graph_from_data_frame(
+    d = collaboration_data,
+    directed = FALSE
+  )
+
+  # Get country centroids
+  get_country_centroid <- function(country) {
+    country_map <- maps::map('world', tolower(country), plot = FALSE)
+    x <- mean(country_map$x, na.rm = TRUE)
+    y <- mean(country_map$y, na.rm = TRUE)
+    return(c(x, y))
+  }
+
+  # Calculate coordinates
+  coords <- matrix(0, nrow = igraph::vcount(g), ncol = 2)
+  for (i in 1:igraph::vcount(g)) {
+    coords[i,] <- get_country_centroid(igraph::V(g)$name[i])
+  }
+
+  # Set up plot with larger margins for labels
+  par(mar = c(1, 1, 2, 1))
+
+  # Draw base world map with darker color
+  maps::map("world", col = "grey", fill = TRUE, border = "gray30")  # Darker map colors
+
+  # Draw edges (connections)
+  for(i in seq_len(nrow(collaboration_data))) {
+    coord1 <- coords[igraph::V(g)$name == collaboration_data$Country1[i],]
+    coord2 <- coords[igraph::V(g)$name == collaboration_data$Country2[i],]
+    weight <- collaboration_data$Cooccurrence[i] / max(collaboration_data$Cooccurrence)
+
+    segments(
+      coord1[1], coord1[2],
+      coord2[1], coord2[2],
+      col = adjustcolor("#a8759e", alpha.f = 0.5 * weight),
+      lwd = 3 * weight  # Increased line width
+    )
+  }
+
+  # Add larger points for countries
+  points(coords, pch = 19, col = "#a8759e", cex = 2)  # Increased point size
+
+  # Country names are omitted
+  # Removed labels for countries
+
+  # Add title
+  title("International Research Collaboration Network",
+        line = 1,
+        cex.main = 1.2,
+        font.main = 2)
+}
+
+# Use the function
+plot_country_network(top10_country_pairs)
+
+```
+
+#### Option 1:
+
+```{r}
+# Load Required Libraries
+library(ggplot2)
+library(ggiraph)
+# library(maps)
+library(dplyr)
+library(tidyr)
+library(patchwork)
+
+# Assuming `top10_country_pairs` DataFrame is ready and contains:
+# Columns: Country1, Country2, Cooccurrence
+
+# Step 1: Prepare World Map Data
+world_map <- map_data("world")
+
+# Step 2: Add Country Coordinates for Collaboration Lines
+# Define approximate centroids for top countries
+country_coords <- tibble(
+  country = c("USA", "UK", "Germany", "Canada", "France", "Italy", "Netherlands", "China"),
+  long = c(-100, -2, 10, -75, 2, 12, 5, 105),
+  lat = c(40, 54, 51, 60, 47, 43, 52, 35)
+)
+
+# Merge coordinates into `top10_country_pairs`
+top10_country_pairs <- top10_country_pairs %>%
+  left_join(country_coords, by = c("Country1" = "country")) %>%
+  rename(long1 = long, lat1 = lat) %>%
+  left_join(country_coords, by = c("Country2" = "country")) %>%
+  rename(long2 = long, lat2 = lat)
+
+# Step 3: Create World Map Visualization
+gg_world_map <- ggplot() +
+  geom_polygon(data = world_map, aes(x = long, y = lat, group = group), fill = "#bec7d4", color = "white") +
+  geom_curve(
+    data = top10_country_pairs,
+    aes(x = long1, y = lat1, xend = long2, yend = lat2, size = Cooccurrence),
+    curvature = 0.2, color = "steelblue", alpha = 0.8
+  ) +
+  geom_point(data = country_coords, aes(x = long, y = lat), color = "#a8759e", size = 2) +
+  theme_void() +
+  ggtitle("World Map: Top 10 Country Collaborations") +
+  theme(legend.position = "none")
+
+# Step 4: Create Bar Chart Visualization
+gg_bar_chart <- ggplot(top10_country_pairs, aes(x = reorder(paste(Country1, Country2, sep = " - "), Cooccurrence), y = Cooccurrence)) +
+  geom_col(fill = "#bec7d4") +
+  coord_flip() +
+  theme_minimal() +
+  labs(x = "Country Collaborations", y = "Number of Collaborations", title = "Top 10 Country Collaborations") +
+  theme(axis.text.y = element_text(size = 10), axis.title.x = element_text(size = 12))
+
+# Step 5: Combine Both Plots
+combined_plot <- gg_world_map / gg_bar_chart + plot_layout(heights = c(3, 2))
+
+# Display the Combined Plot
+print(combined_plot)
+
+```
+
+#### Option 1 Version N
+
+```{r}
+# Load the required library
+library(scales)
+
+# Rescale the 'total_collaborations' column to the range (1, 8)
+country_collaboration_size <- country_collaboration_size %>%
+  mutate(size = scales::rescale(total_collaborations, to = c(1, 8)))
+
+
+# Add country collaboration size to country_coords
+country_coords <- tibble(
+  country = c("USA", "UK", "Germany", "Canada", "France", "Italy", "Netherlands", "China"),
+  long = c(-100, -2, 10, -75, 2, 12, 5, 105),
+  lat = c(40, 54, 51, 60, 47, 43, 52, 35),
+  size = c(8, 4.96, 3.14, 1.44, 1.15, 1.79, 1.76, 1) # Example values
+)
+
+
+
+
+
+
+
+# Update gg_world_map
+gg_world_map <- ggplot() +
+  geom_polygon(
+    data = world_map,
+    aes(x = long, y = lat, group = group),
+    fill = "#7f8993",
+    color = "white"
+  ) +
+  geom_point(
+    data = country_coords, 
+    aes(x = long, y = lat, size = size), 
+    color = "#ac7ca2"
+  ) +
+  scale_size_continuous(range = c(2, 8)) + # Adjust size scale
+  theme_void() +
+  ggtitle("World Map: Top 10 Country Collaborations") +
+  theme(legend.position = "bottom") + # Add legend for size 
+  theme(
+    plot.title = element_text(hjust = 0.5)  # Center the title
+  )
+print(gg_world_map)
+
+
+
+# Combine the map and bar chart
+combined_plot <- gg_world_map / gg_bar_chart + plot_layout(heights = c(3, 2))
+
+# Display the plot
+print(combined_plot)
+
+```
+
+#### Option N+2
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(tibble)
+library(scales)
+
+# Define world map
+world_map <- map_data("world")
+
+# Define country coordinates and original sizes
+country_coords <- tibble(
+  country = c("USA", "UK", "Germany", "Canada", "France", "Italy", "Netherlands", "China"),
+  long = c(-100, -2, 10, -75, 2, 12, 5, 105),
+  lat = c(40, 54, 51, 60, 47, 43, 52, 35),
+  size = c(8, 4.96, 3.14, 1.44, 1.15, 1.79, 1.76, 1) # Original values
+)
+
+# Define collaboration data for lines
+collaborations <- tibble(
+  country1 = c("USA", "USA", "USA", "USA", "USA", "USA", "USA"),
+  country2 = c("UK", "Germany", "Canada", "France", "Italy", "Netherlands", "China"),
+  collaborations = c(800, 700, 600, 500, 400, 350, 300)
+)
+
+# Merge coordinates for country1 and country2
+collaboration_lines <- collaborations %>%
+  left_join(country_coords, by = c("country1" = "country")) %>%
+  rename(long1 = long, lat1 = lat) %>%
+  left_join(country_coords, by = c("country2" = "country")) %>%
+  rename(long2 = long, lat2 = lat) %>%
+  drop_na()
+
+# Create the map with points and lines
+gg_world_map <- ggplot() +
+  # Draw world map
+  geom_polygon(
+    data = world_map,
+    aes(x = long, y = lat, group = group),
+    fill = "#7f8993",
+    color = "white"
+  ) +
+  # Add straight lines between countries
+  geom_segment(
+    data = collaboration_lines,
+    aes(x = long1, y = lat1, xend = long2, yend = lat2),
+    color = "#ac7ca2",  # Line color matching points
+    size = 0.5,         # Thin lines
+    alpha = 0.8         # Transparency
+  ) +
+  # Add points with original sizes
+  geom_point(
+    data = country_coords,
+    aes(x = long, y = lat, size = size),
+    color = "#ac7ca2"
+  ) +
+  # Adjust size scale for legend consistency
+  scale_size_continuous(range = c(2, 8)) +
+  theme_void() +
+  ggtitle("World Map: Top 10 Country Collaborations") +
+  theme(
+    plot.title = element_text(hjust = 0.5), # Center title
+    legend.position = "bottom"             # Position legend below map
+  )
+
+# Print the map
+print(gg_world_map)
+```
+
+# Wrong model(Ignore), you can select Right model from the Outline
+### Fit model: model 1(multileve mixed)
+
+> Since "extracted country" is character, wrong model.
+
+```{r}
+# library(glmmTMB)
+# model_country_count_1 <- glmmTMB(
+#   times_cited ~ country_count +
+#     publication_year + author_count + document_type + journal + founding_orgs_binary +
+#    (1 | extracted_country),
+#   family = nbinom2,
+#   data = merged_data
+# )
+# summary(model_country_count_1)
+```
+
+### Visualization for model 1(multileve mixed): model_country_count_1
+
+```{r}
+# # Load required library for plotting
+# library(ggplot2)
+# library(dplyr)
+# 
+# # Step 1: Create a new dataset for predictions
+# prediction_data <- merged_data %>%
+#   summarize(
+#     publication_year = mean(publication_year, na.rm = TRUE),
+#     author_count = mean(author_count, na.rm = TRUE),
+#     founding_orgs_binary = 0.5,
+#     document_type = levels(merged_data$document_type)[1],  # Use the first factor level
+#     journal = levels(merged_data$journal)[1],              # Use the first factor level
+#     extracted_country = NA
+#   ) %>%
+#   expand_grid(country_count = seq(min(merged_data$country_count, na.rm = TRUE),
+#                                   max(merged_data$country_count, na.rm = TRUE), length.out = 100))
+# 
+# # Step 2: Predict using the model
+# prediction_data <- prediction_data %>%
+#   mutate(
+#     predicted_times_cited = predict(model_country_count_1, newdata = ., type = "response")
+#   )
+# 
+# # Step 3: Scatter plot of observed vs predicted
+# # Scatter plot with jittered points
+# ggplot() +
+#   # Add actual data points with jitter
+#   geom_point(
+#     data = merged_data,
+#     aes(x = country_count, y = times_cited),
+#     color = "#bec7d4", alpha = 0.6, size = 1.5,
+#     position = position_jitter(width = 0.2, height = 0)  # Jitter horizontally
+#   ) +
+#   # Add predicted values as a red line
+#   geom_line(
+#     data = prediction_data,
+#     aes(x = country_count, y = predicted_times_cited),
+#     color = "#a8759e", size = 1.2
+#   ) +
+#   # Customize labels and theme
+#   labs(
+#     title = "Effect of Country Count on Times Cited",
+#     x = "Country Count",
+#     y = "Times Cited"
+#   ) +
+#   theme_minimal() +
+#   theme(
+#     plot.title = element_text(size = 14, face = "bold"),
+#     axis.text = element_text(size = 10),
+#     axis.title = element_text(size = 12)
+#   ) +
+#   theme(
+#     plot.title = element_text(hjust = 0.5)  # Center the title
+#   )
+# 
+# ```
+# 
+# ### 
+# 
+# ```{r}
+# # 1. First fit the model
+# library(glmmTMB)
+# library(ggeffects)
+# 
+# model_country_count_1 <- glmmTMB(
+#   times_cited ~ country_count +
+#     publication_year + author_count + document_type + journal + founding_orgs_binary +
+#     (1 | extracted_country),
+#   family = nbinom2,
+#   data = merged_data
+# )
+# 
+# # 2. Get predicted values while holding other variables at their means/reference levels
+# predicted_data <- ggeffect(model_country_count_1, terms = c("country_count", "journal"))
+# 
+# # 3. Create the plot
+# ggplot(predicted_data, aes(x = x, y = predicted, fill = group)) +
+#   geom_bar(stat = "identity", position = "dodge") +
+#   scale_fill_manual(values = c("brain" = "#ba94b2", 
+#                               "jocn" = "#d3d3d3",
+#                               "nature_neuroscience" = "#7f8993")) +
+#   labs(x = "Number of Collaborating Countries",
+#        y = "Mean Times Cited",
+#        title = "Citations by Country Collaboration Count and Journal",
+#        fill = "Journal") +
+#   theme_minimal() +
+#   theme(
+#     plot.title = element_text(hjust = 0.5),
+#     panel.grid.major = element_line(color = "gray90"),
+#     panel.grid.minor = element_line(color = "gray95")
+#   )
+```
+
+```{r}
+# 1. Fit the model
+# library(glmmTMB)
+# 
+# model_country_count_1 <- glmmTMB(
+#  times_cited ~ country_count +
+#    publication_year + author_count + document_type + journal + founding_orgs_binary +
+#    (1 | extracted_country),
+#  family = nbinom2,
+#  data = merged_data
+# )
+# 
+# # 2. Get predictions and add them to original data
+# merged_data$predicted_citations <- predict(model_country_count_1, type = "response")
+# 
+# # 3. Calculate means by country count and journal
+# summary_data <- merged_data |>
+#  group_by(country_count, journal) |>
+#  summarize(mean_predicted = mean(predicted_citations),
+#            .groups = "drop")
+# 
+# # 4. Create the plot
+# ggplot(summary_data, aes(x = factor(country_count), y = mean_predicted, fill = journal)) +
+#  geom_bar(stat = "identity", position = "dodge") +
+#  scale_fill_manual(values = c("brain" = "#ba94b2", 
+#                              "jocn" = "#d3d3d3",
+#                              "nature_neuroscience" = "#7f8993")) +
+#  labs(x = "Number of Collaborating Countries",
+#       y = "Predicted Mean Times Cited",
+#       title = "Predicted Citations by Country Collaboration Count and Journal",
+#       fill = "Journal") +
+#  theme_minimal() +
+#  theme(
+#    plot.title = element_text(hjust = 0.5),
+#    panel.grid.major = element_line(color = "gray90"),
+#    panel.grid.minor = element_line(color = "gray95")
+#  )
+# ```
+# 
+# ```{r}
+# # 1. Fit the model
+# model_country_count_1 <- glmmTMB(
+#   times_cited ~ country_count +
+#     publication_year + author_count + document_type + journal + founding_orgs_binary +
+#     (1 | extracted_country),
+#   family = nbinom2,
+#   data = merged_data
+# )
+# 
+# # 2. Get predictions and add them to original data
+# merged_data$predicted_citations <- predict(model_country_count_1, type = "response")
+# 
+# # 3. Create a new country_count_category
+# merged_data <- merged_data |>
+#   mutate(country_count_cat = case_when(
+#     country_count >= 10 ~ ">=10",
+#     TRUE ~ as.character(country_count)
+#   ))
+# 
+# # 4. Calculate means by country count category and journal
+# summary_data <- merged_data |>
+#   group_by(country_count_cat, journal) |>
+#   summarize(mean_predicted = mean(predicted_citations),
+#             .groups = "drop")
+# 
+# # 5. Create the plot with modified x-axis
+# ggplot(summary_data, aes(x = factor(country_count_cat, 
+#                                    levels = c("1", "2", "3", "4", "5", "6", "7", "8", "9", ">=10")), 
+#                         y = mean_predicted, 
+#                         fill = journal)) +
+#   geom_bar(stat = "identity", position = "dodge") +
+#   scale_fill_manual(values = c("brain" = "#ba94b2", 
+#                               "jocn" = "#d3d3d3",
+#                               "nature_neuroscience" = "#7f8993")) +
+#   scale_y_continuous(limits = c(0, 300)) +  # Adjust y-axis limits
+#   labs(x = "Number of Collaborating Countries",
+#        y = "Predicted Mean Times Cited",
+#        title = "Predicted Citations by Country Collaboration Count and Journal",
+#        fill = "Journal") +
+#   theme_minimal() +
+#   theme(
+#     plot.title = element_text(hjust = 0.5),
+#     panel.grid.major = element_line(color = "gray90"),
+#     panel.grid.minor = element_line(color = "gray95")
+#   )
+```
+
+### model 2 by journal=brain
+
+```{r}
+# # Load required library for plotting
+# library(ggplot2)
+# library(dplyr)
+# 
+# 
+# library(glmmTMB)
+# model_country_count_2 <- glmmTMB(
+#   times_cited ~ country_count +
+#     publication_year + author_count + document_type + founding_orgs_binary +
+#    (1 | extracted_country),
+#   family = nbinom2,
+#   data = merged_data
+# )
+# 
+# 
+# # Step 1: Create a new dataset for predictions, filtering for "brain"
+# prediction_data <- merged_data %>%
+#   filter(journal == "brain") %>%  # Filter for the journal "Brain"
+#   summarize(
+#     publication_year = mean(publication_year, na.rm = TRUE),
+#     author_count = mean(author_count, na.rm = TRUE),
+#     founding_orgs_binary = 0.5,
+#     document_type = levels(merged_data$document_type)[1],  # Use the first factor level
+#     extracted_country = NA
+#   ) %>%
+#   expand_grid(country_count = seq(
+#     min(merged_data$country_count, na.rm = TRUE),
+#     max(merged_data$country_count, na.rm = TRUE),
+#     length.out = 100
+#   ))
+# 
+# # Step 2: Predict using the model
+# prediction_data <- prediction_data %>%
+#   mutate(
+#     predicted_times_cited = predict(model_country_count_2, newdata = ., type = "response")
+#   )
+# 
+# # Step 3: Scatter plot of observed vs predicted
+# ggplot() +
+#   # Add actual data points with jitter for "brain"
+#   geom_point(
+#     data = merged_data %>% filter(journal == "brain"),  # Filter actual data for "brain"
+#     aes(x = country_count, y = times_cited),
+#     color = "#bec7d4", alpha = 0.6, size = 1.5,
+#     position = position_jitter(width = 0.2, height = 0)  # Jitter horizontally
+#   ) +
+#   # Add predicted values as a red line
+#   geom_line(
+#     data = prediction_data,
+#     aes(x = country_count, y = predicted_times_cited),
+#     color = "#a8759e", size = 1.2
+#   ) +
+#   # Customize labels and theme
+#   labs(
+#     title = "Effect of Country Count on Times Cited for Brain",
+#     x = "Country Count",
+#     y = "Times Cited"
+#   ) +
+#   theme_minimal() +
+#   theme(
+#     plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+#     axis.text = element_text(size = 10),
+#     axis.title = element_text(size = 12)
+#   )
+
+```
+
+### plot model 3
+
+> Since "extracted country" is character, wrong model.
+
+```{r}
+# library(glmmTMB)
+# model_country_count_3 <- glmmTMB(
+#   times_cited ~ country_count +
+#     publication_year + author_count + document_type + founding_orgs_binary +
+#    (1 | extracted_country),
+#   family = nbinom2,
+#   data = filtered_data_brain
+# )
+# 
+# 
+# ??predict
+# xweight <- seq(1, 22, 1)
+# 
+# yweight <- predict(model_country_count_3, list(country_count = xweight), type = 'response')
+# 
+# plot(filtered_data_brain$country_count, filtered_data_brain$times_cited, pch = 16, xlab = "country count", ylab = "times cited")
+
+```
+
+```{r}
+# # Filter data for "brain"
+# filtered_data_brain <- merged_data |> 
+#   filter(journal == "brain")
+# 
+# # Fit the model for the filtered data
+# model_country_count_3 <- glmmTMB(
+#   times_cited ~ country_count + publication_year + author_count + document_type + founding_orgs_binary + 
+#     (1 | extracted_country),
+#   family = nbinom2,
+#   data = filtered_data_brain
+# )
+# 
+# # Check for convergence warnings
+# if (!is.null(model_country_count_3$sdr$pdHess) && !model_country_count_3$sdr$pdHess) {
+#   warning("Model did not converge. The Hessian matrix is not positive definite. Check for multicollinearity or data issues.")
+# }
+# 
+# 
+# 
+# 
+# 
+# # Create a sequence for `country_count` predictions
+# xweight <- seq(min(filtered_data_brain$country_count, na.rm = TRUE),
+#                max(filtered_data_brain$country_count, na.rm = TRUE), length.out = 100)
+# 
+# # Prediction: Include all required variables with fixed values
+# prediction_data <- data.frame(
+#   country_count = xweight,
+#   publication_year = mean(filtered_data_brain$publication_year, na.rm = TRUE),
+#   author_count = mean(filtered_data_brain$author_count, na.rm = TRUE),
+#   founding_orgs_binary = 0.5,
+#   document_type = levels(filtered_data_brain$document_type)[1],  # Use the first factor level
+#   extracted_country = NA
+# )
+# 
+# # Predict times cited
+# prediction_data$predicted_times_cited <- predict(model_country_count_3, newdata = prediction_data, type = "response")
+# 
+# # Plot predictions
+# library(ggplot2)
+# 
+# ggplot() +
+#   # Scatter plot with jittered points for actual data
+#   geom_point(
+#     data = filtered_data_brain,
+#     aes(x = country_count, y = times_cited),
+#     color = "#bec7d4", alpha = 0.6, size = 1.5,
+#     position = position_jitter(width = 0.2, height = 0)
+#   ) +
+#   # Predicted line
+#   geom_line(
+#     data = prediction_data,
+#     aes(x = country_count, y = predicted_times_cited),
+#     color = "#a8759e", size = 1.2
+#   ) +
+#   labs(
+#     title = "Effect of Country Count on Times Cited for Brain",
+#     x = "Country Count",
+#     y = "Predicted Times Cited"
+#   ) +
+#   theme_minimal() +
+#   theme(
+#     plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+#     axis.text = element_text(size = 10),
+#     axis.title = element_text(size = 12)
+#   )
+
+```
+
+### Model 3 residuals
+
+```{r}
+# # Load required libraries
+# library(ggplot2)
+# 
+# # Extract fitted values and residuals
+# fitted_vals <- predict(model_country_count_3, type = "response")  # Fitted values
+# residuals_vals <- residuals(model_country_count_3, type = "pearson")  # Pearson residuals
+# 
+# # Combine into a data frame
+# diagnostics_data <- data.frame(
+#   Fitted = fitted_vals,
+#   Residuals = residuals_vals
+# )
+# 
+# # Residuals vs Fitted plot
+# ggplot(diagnostics_data, aes(x = Fitted, y = Residuals)) +
+#   geom_point(alpha = 0.5, color = "blue") +
+#   geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+#   labs(
+#     title = "Residuals vs Fitted",
+#     x = "Fitted Values",
+#     y = "Pearson Residuals"
+#   ) +
+#   theme_minimal()
+# 
+# # Q-Q Plot for residuals
+# qqnorm(residuals_vals, main = "Q-Q Plot of Residuals")
+# qqline(residuals_vals, col = "red", lwd = 2)
+# 
+# # Scale-Location Plot
+# ggplot(diagnostics_data, aes(x = Fitted, y = sqrt(abs(Residuals)))) +
+#   geom_point(alpha = 0.5, color = "blue") +
+#   geom_smooth(method = "loess", color = "red", se = FALSE) +
+#   labs(
+#     title = "Scale-Location Plot",
+#     x = "Fitted Values",
+#     y = "√|Residuals|"
+#   ) +
+#   theme_minimal()
+
+```
+
+### model 1 residual
+
+```{r}
+# # Load required libraries
+# library(ggplot2)
+# 
+# # Extract fitted values and residuals
+# fitted_vals <- predict(model_country_count_1, type = "response")  # Fitted values
+# residuals_vals <- residuals(model_country_count_1, type = "pearson")  # Pearson residuals
+# 
+# # Combine into a data frame
+# diagnostics_data <- data.frame(
+#   Fitted = fitted_vals,
+#   Residuals = residuals_vals
+# )
+# 
+# # Residuals vs Fitted plot (Swapped x and y)
+# ggplot(diagnostics_data, aes(x = Residuals, y = Fitted)) +
+#   geom_point(alpha = 0.5, color = "blue") +
+#   geom_vline(xintercept = 0, linetype = "dashed", color = "red") +
+#   labs(
+#     title = "Fitted vs Residuals",
+#     x = "Pearson Residuals",
+#     y = "Fitted Values"
+#   ) +
+#   theme_minimal()
+# 
+# # Q-Q Plot for residuals (No changes needed)
+# qqnorm(residuals_vals, main = "Q-Q Plot of Residuals")
+# qqline(residuals_vals, col = "red", lwd = 2)
+# 
+# # Scale-Location Plot (Swapped x and y)
+# ggplot(diagnostics_data, aes(x = sqrt(abs(Residuals)), y = Fitted)) +
+#   geom_point(alpha = 0.5, color = "blue") +
+#   geom_smooth(method = "loess", color = "red", se = FALSE) +
+#   labs(
+#     title = "Fitted vs √|Residuals|",
+#     x = "√|Residuals|",
+#     y = "Fitted Values"
+#   ) +
+#   theme_minimal()
+
+
+```
+
+### model 1 plot with sjPlot library
+
+```{r}
+# install.packages("sjPlot")
+# library(sjPlot)    
+# sjPlot::plot_model(model_country_count_1, vline.color = "red")    
+# sjPlot::plot_model(model_country_count_1, show.values = TRUE, value.offset = .3)   
+```
+
+### plot model 1
+
+```{r}
+# # Create a data frame with country_count and other predictors
+# Predicted_data <- data.frame(
+#   country_count = seq(
+#     min(merged_data$country_count, na.rm = TRUE), 
+#     max(merged_data$country_count, na.rm = TRUE), 
+#     length.out = 500
+#   ),
+#   publication_year = mean(merged_data$publication_year, na.rm = TRUE),  # Use the mean year
+#   author_count = mean(merged_data$author_count, na.rm = TRUE),          # Use the mean author count
+#   document_type = levels(merged_data$document_type)[1],                 # Use the first document type
+#   journal = levels(merged_data$journal)[1],                             # Use the first journal
+#   founding_orgs_binary = 0                                              # Example value for binary variable
+# )
+# 
+# # Add a placeholder for extracted_country (e.g., NA or a representative value)
+# Predicted_data$extracted_country <- NA
+# 
+# # Fill predicted values using the regression model
+# Predicted_data$times_cited <- predict(
+#   model_country_count_1, 
+#   newdata = Predicted_data, 
+#   type = "response",
+#   allow.new.levels = TRUE  # Allow new or missing random effect levels
+# )
+# 
+# # Plot original data points
+# plot(
+#   times_cited ~ country_count, 
+#   data = merged_data, 
+#   xlab = "Country Count", 
+#   ylab = "Times Cited", 
+#   main = "Effect of Country Count on Times Cited",
+#   col = "blue", 
+#   pch = 16, 
+#   cex = 0.7
+# )
+# 
+# # Add predicted line to the plot
+# lines(
+#   times_cited ~ country_count, 
+#   data = Predicted_data, 
+#   lwd = 2, 
+#   col = "green"
+# )
+
+```
+
+### Average times cited
+
+```{r}
+# Step 1: Aggregate the data to compute average times cited by country_count
+aggregated_data <- merged_data %>%
+  group_by(country_count) %>%
+  summarize(
+    average_times_cited = mean(times_cited, na.rm = TRUE)
+  ) %>%
+  ungroup()
+
+# Step 2: Create a new dataset for predictions
+prediction_data <- merged_data %>%
+  summarize(
+    publication_year = mean(publication_year, na.rm = TRUE),
+    author_count = mean(author_count, na.rm = TRUE),
+    founding_orgs_binary = 0.5,
+    document_type = levels(merged_data$document_type)[1],  # Use the first factor level
+    journal = levels(merged_data$journal)[1],              # Use the first factor level
+    extracted_country = "USA"  # Add a dummy extracted_country
+  ) %>%
+  expand_grid(country_count = seq(
+    min(merged_data$country_count, na.rm = TRUE),
+    max(merged_data$country_count, na.rm = TRUE),
+    length.out = 100
+  ))
+
+# Step 3: Predict using the model
+prediction_data <- prediction_data %>%
+  mutate(
+    predicted_times_cited = predict(model_country_count_1, newdata = ., type = "response")
+  )
+
+# Step 4: Plot the relationship
+ggplot() +
+  # Add aggregated average times cited as points
+  geom_point(
+    data = aggregated_data,
+    aes(x = country_count, y = average_times_cited),
+    color = "#bec7d4", alpha = 0.8, size = 2
+  ) +
+  # Add predicted values as a red line
+  geom_line(
+    data = prediction_data,
+    aes(x = country_count, y = predicted_times_cited),
+    color = "#a8759e", size = 1.2
+  ) +
+  # Customize labels and theme
+  labs(
+    title = "Effect of Country Count on Average Times Cited",
+    x = "Country Count",
+    y = "Average Times Cited"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    axis.text = element_text(size = 10),
+    axis.title = element_text(size = 12)
+  )
+
+```
+
+### Visulization for model 1(multileve mixed): model_country_count_1(line graph for journals)
+
+#### JOCN line graph: The relationship between jocn and times_cited
+
+```{r}
+# # Filter data for JoCN
+# filtered_data_jocn <- merged_data |>
+#   filter(journal == "jocn")  # Filter for the journal JoCN
+# 
+# # Generate predicted values for JoCN
+# filtered_data_jocn <- filtered_data_jocn |>
+#   mutate(predicted_times_cited = predict(model_country_count_1, newdata = filtered_data_jocn, type = "response"))
+# 
+# # Create the line graph with jittered points
+# ggplot(filtered_data_jocn, aes(x = publication_year)) +
+#   geom_line(aes(y = predicted_times_cited), color = "blue", size = 1) +  # Predicted values
+#   geom_jitter(aes(y = times_cited), alpha = 0.5, size = 2, color = "grey", width = 0.2) +  # Jittered observed values
+#   labs(
+#     title = "Relationship Between JoCN and Times Cited",
+#     x = "Publication Year",
+#     y = "Times Cited"
+#   ) +
+#   theme_minimal()
+```
+
+#### Jocn: Average citation times:
+
+```{r}
+# # Filter data for JoCN
+# filtered_data_jocn <- merged_data |>
+#   filter(journal == "jocn")  # Filter for the journal JoCN
+# 
+# # Compute average citations by publication year
+# average_citation_data_jocn <- filtered_data_jocn |>
+#   group_by(publication_year) |>
+#   summarize(average_times_cited = mean(times_cited, na.rm = TRUE), .groups = "drop")
+# 
+# # Create the line graph for average citations
+# ggplot(average_citation_data_jocn, aes(x = publication_year, y = average_times_cited)) +
+#   geom_line(color = "blue", size = 1) +  # Line for average citations
+#   labs(
+#     title = "Average Times Cited Over Years for JoCN",
+#     x = "Publication Year",
+#     y = "Average Times Cited"
+#   ) +
+#   theme_minimal() +
+#   theme(
+#     plot.title = element_text(hjust = 0.5)  # Center the title
+#   )
+
+```
+
+```{r}
+# # Filter data for JoCN
+# filtered_data_jocn <- merged_data |>
+#   filter(journal == "jocn")  # Filter for the journal JoCN
+# 
+# # Compute average citations by country count
+# average_citation_data_jocn <- filtered_data_jocn |>
+#   group_by(country_count) |>
+#   summarize(
+#     average_times_cited = mean(times_cited, na.rm = TRUE),
+#     .groups = "drop"
+#   )
+# 
+# # Create the line graph for average citations by country count
+# ggplot(average_citation_data_jocn, aes(x = country_count, y = average_times_cited)) +
+#   geom_line(color = "blue", size = 1) +  # Line for average citations
+#   labs(
+#     title = "Average Times Cited by Country Count for JoCN",
+#     x = "Country Count",
+#     y = "Average Times Cited"
+#   ) +
+#   theme_minimal() +
+#   theme(
+#     plot.title = element_text(hjust = 0.5)  # Center the title
+#   )
+
+```
+
+#### BRAIN line graph: The relationship between jocn and times_cited
+
+```{r}
+# # Filter data for Brain
+# filtered_data_brain <- merged_data |>
+#   filter(journal == "brain")  # Filter for the journal Brain
+# 
+# # Generate predicted values for Brain
+# filtered_data_brain <- filtered_data_brain |>
+#   mutate(predicted_times_cited = predict(model_country_count_1, newdata = filtered_data_brain, type = "response"))
+# 
+# # Create the line graph with jittered points
+# ggplot(filtered_data_brain, aes(x = publication_year)) +
+#   geom_line(aes(y = predicted_times_cited), color = "blue", size = 1) +  # Predicted values
+#   geom_jitter(aes(y = times_cited), alpha = 0.5, size = 2, color = "darkorange", width = 0.2) +  # Jittered observed values
+#   labs(
+#     title = "Relationship Between Brain and Times Cited",
+#     x = "Publication Year",
+#     y = "Times Cited"
+#   ) +
+#   theme_minimal()
+
+```
+
+#### Brian: Average citation times
+
+```{r}
+# # Filter data for Brain
+# filtered_data_brain <- merged_data |>
+#   filter(journal == "brain")  # Filter for the journal Brain
+# 
+# # Compute average citations by publication year
+# average_citation_data_brain <- filtered_data_brain |>
+#   group_by(publication_year) |>
+#   summarize(average_times_cited = mean(times_cited, na.rm = TRUE), .groups = "drop")
+# 
+# # Create the line graph for average citations
+# ggplot(average_citation_data_brain, aes(x = publication_year, y = average_times_cited)) +
+#   geom_line(color = "blue", size = 1) +  # Line for average citations
+#   labs(
+#     title = "Average Times Cited Over Years for Brain",
+#     x = "Publication Year",
+#     y = "Average Times Cited"
+#   ) +
+#   theme_minimal() +
+#   theme(
+#     plot.title = element_text(hjust = 0.5)  # Center the title
+#   )
+
+```
+
+#### Average citaion time: brain
+
+```{r}
+# # Filter data for Brain
+# filtered_data_brain <- merged_data |> 
+#   filter(journal == "brain")  # Filter for the journal Brain
+# 
+# # Compute average citations by country count
+# average_citation_data_brain <- filtered_data_brain |> 
+#   group_by(country_count) |> 
+#   summarize(
+#     average_times_cited = mean(times_cited, na.rm = TRUE),
+#     .groups = "drop"
+#   )
+# 
+# # Create the line graph for average citations by country count
+# ggplot(average_citation_data_brain, aes(x = country_count, y = average_times_cited)) +
+#   geom_line(color = "blue", size = 1) +  # Line for average citations
+#   labs(
+#     title = "Average Times Cited by Country Count for Brain",
+#     x = "Country Count",
+#     y = "Average Times Cited"
+#   ) +
+#   theme_minimal() +
+#   theme(
+#     plot.title = element_text(hjust = 0.5)  # Center the title
+#   )
+
+```
+
+#### Predicted Average Times Cited by Country Count for Brain
+
+```{r}
+# # Filter data for Brain
+# filtered_data_brain <- merged_data |> 
+#   filter(journal == "brain")  # Filter for the journal Brain
+# 
+# # Prepare prediction data
+# prediction_data_brain <- data.frame(
+#   country_count = seq(
+#     min(filtered_data_brain$country_count, na.rm = TRUE),
+#     max(filtered_data_brain$country_count, na.rm = TRUE),
+#     length.out = 100
+#   ),
+#   publication_year = mean(filtered_data_brain$publication_year, na.rm = TRUE),  # Fixed year
+#   author_count = mean(filtered_data_brain$author_count, na.rm = TRUE),  # Fixed author count
+#   document_type = levels(filtered_data_brain$document_type)[1],  # Use the first level of document_type
+#   journal = "brain",  # Specify the journal as Brain
+#   founding_orgs_binary = c(0, 1),  # Set binary variable as needed
+#   extracted_country = NA  # Random effect group is set to NA
+# )
+# 
+# # Predict average times cited using the model
+# prediction_data_brain <- prediction_data_brain |> 
+#   mutate(
+#     predicted_times_cited = predict(
+#       model_country_count_1,
+#       newdata = prediction_data_brain,
+#       type = "response"
+#     )
+#   )
+# 
+# # Create the line graph for predicted average citations by country count
+# ggplot(prediction_data_brain, aes(x = country_count, y = predicted_times_cited)) +
+#   geom_line(color = "blue", size = 1) +  # Line for predicted citations
+#   labs(
+#     title = "Predicted Average Times Cited by Country Count for Brain",
+#     x = "Country Count",
+#     y = "Predicted Average Times Cited"
+#   ) +
+#   theme_minimal() +
+#   theme(
+#     plot.title = element_text(hjust = 0.5)  # Center the title
+#   )
+
+```
+
+#### Nature_neuroscience line graph: The relationship between jocn and times_cited
+
+```{r}
+# # Filter data for Nature Neuroscience
+# filtered_data_nature <- merged_data |>
+#   filter(journal == "nature_neuroscience")  # Filter for the journal Nature Neuroscience
+# 
+# # Generate predicted values for Nature Neuroscience
+# filtered_data_nature <- filtered_data_nature |>
+#   mutate(predicted_times_cited = predict(model_country_count_1, newdata = filtered_data_nature, type = "response"))
+# 
+# # Create the line graph with jittered points
+# ggplot(filtered_data_nature, aes(x = publication_year)) +
+#   geom_line(aes(y = predicted_times_cited), color = "blue", size = 1) +  # Predicted values
+#   geom_jitter(aes(y = times_cited), alpha = 0.5, size = 2, color = "darkorange", width = 0.2) +  # Jittered observed values
+#   labs(
+#     title = "Relationship Between Nature Neuroscience and Times Cited",
+#     x = "Publication Year",
+#     y = "Times Cited"
+#   ) +
+#   theme_minimal()
+
+```
+
+#### Nature_neuroscience: Only lines
+
+```{r}
+# # Filter data for Nature Neuroscience
+# filtered_data_nature <- merged_data |>
+#   filter(journal == "nature_neuroscience")  # Filter for the journal Nature Neuroscience
+# 
+# # Generate predicted values for Nature Neuroscience
+# filtered_data_nature <- filtered_data_nature |>
+#   mutate(predicted_times_cited = predict(model_country_count_1, newdata = filtered_data_nature, type = "response"))
+# 
+# # Create the line graph
+# ggplot(filtered_data_nature, aes(x = publication_year)) +
+#   geom_line(aes(y = predicted_times_cited), color = "blue", size = 1) +  # Predicted values
+#   labs(
+#     title = "Relationship Between Nature Neuroscience and Times Cited",
+#     x = "Publication Year",
+#     y = "Predicted Times Cited"
+#   ) +
+#   theme_minimal()
+
+```
+
+#### Nature_neuroscience: Avereage times_cited
+
+```{r}
+# # Filter data for Nature Neuroscience
+# filtered_data_nature <- merged_data |>
+#   filter(journal == "nature_neuroscience")  # Filter for the journal Nature Neuroscience
+# 
+# # Compute average citations by publication year
+# average_citation_data <- filtered_data_nature |>
+#   group_by(publication_year) |>
+#   summarize(average_times_cited = mean(times_cited, na.rm = TRUE), .groups = "drop")
+# 
+# # Create the line graph for average citations
+# ggplot(average_citation_data, aes(x = publication_year, y = average_times_cited)) +
+#   geom_line(color = "blue", size = 1) +  # Line for average citations
+#   labs(
+#     title = "Average Times Cited Over Years for Nature Neuroscience",
+#     x = "Publication Year",
+#     y = "Average Times Cited"
+#   ) +
+#   theme_minimal() +
+#   theme(
+#     plot.title = element_text(hjust = 0.5)  # Center the title
+#   )
+```
+
+#### Average citaion time: nature_neuroscience
+
+```{r}
+# # Filter data for Nature Neuroscience
+# filtered_data_nature <- merged_data |> 
+#   filter(journal == "nature_neuroscience")  # Filter for the journal Nature Neuroscience
+# 
+# # Compute average citations by country count
+# average_citation_data <- filtered_data_nature |> 
+#   group_by(country_count) |> 
+#   summarize(
+#     average_times_cited = mean(times_cited, na.rm = TRUE), 
+#     .groups = "drop"
+#   )
+# 
+# # Create the line graph for average citations by country count
+# ggplot(average_citation_data, aes(x = country_count, y = average_times_cited)) +
+#   geom_line(color = "blue", size = 1) +  # Line for average citations
+#   labs(
+#     title = "Average Times Cited by Country Count for Nature Neuroscience",
+#     x = "Country Count",
+#     y = "Average Times Cited"
+#   ) +
+#   theme_minimal() +
+#   theme(
+#     plot.title = element_text(hjust = 0.5)  # Center the title
+#   )
+
+```
+
+#### Relationship Between Country Count and Times Cited(Used facet_wrap(\~journal) + fit country_count mulitilevel model)
+
+```{r}
+# library(ggplot2)
+# library(dplyr)
+# 
+# # Step 1: Create a sequence of `country_count` values and expand grid for prediction
+# country_count_seq <- seq(
+#   min(merged_data$country_count, na.rm = TRUE),
+#   max(merged_data$country_count, na.rm = TRUE),
+#   length.out = 100
+# )
+# 
+# # Extract distinct journals and expand grid
+# distinct_journals <- merged_data |> distinct(journal)
+# 
+# prediction_data <- expand_grid(
+#   journal = distinct_journals$journal,  # Use unique journal names
+#   country_count = country_count_seq,
+#   publication_year = mean(merged_data$publication_year, na.rm = TRUE),
+#   author_count = mean(merged_data$author_count, na.rm = TRUE),
+#   document_type = levels(merged_data$document_type)[1],
+#   founding_orgs_binary = mean(merged_data$founding_orgs_binary, na.rm = TRUE),
+#   extracted_country = NA  # Random effects are excluded from fixed-effect predictions
+# )
+# 
+# # Step 2: Predict values for `times_cited`
+# prediction_data$predicted_times_cited <- predict(
+#   model_country_count_1,
+#   newdata = prediction_data,
+#   type = "response"
+# )
+# 
+# # Step 3: Create the line graph with facets by journal
+# ggplot(prediction_data, aes(x = country_count, y = predicted_times_cited)) +
+#   geom_line(color = "blue", size = 1) +  # Line for predicted citations
+#   facet_wrap(~journal, scales = "free") +  # Facet by journal
+#   labs(
+#     title = "Relationship Between Country Count and Times Cited",
+#     x = "Country Count",
+#     y = "Predicted Times Cited"
+#   ) +
+#   theme_minimal() +
+#   theme(
+#     plot.title = element_text(hjust = 0.5),  # Center the title
+#     strip.text = element_text(size = 10, face = "bold")  # Style facet labels
+#   )
+
+
+```
+
+#### Option 2
+
+```{r}
+# library(ggplot2)
+# library(dplyr)
+# 
+# # Step 1: Create a sequence of `country_count` values and expand grid for prediction
+# country_count_seq <- seq(
+#   min(merged_data$country_count, na.rm = TRUE),
+#   max(merged_data$country_count, na.rm = TRUE),
+#   length.out = 100
+# )
+# 
+# # Extract distinct journals and expand grid
+# distinct_journals <- merged_data |> distinct(journal)
+# 
+# prediction_data <- expand_grid(
+#   journal = distinct_journals$journal,  # Use unique journal names
+#   country_count = country_count_seq,
+#   publication_year = mean(merged_data$publication_year, na.rm = TRUE),
+#   author_count = mean(merged_data$author_count, na.rm = TRUE),
+#   document_type = levels(merged_data$document_type)[1],
+#   founding_orgs_binary = mean(merged_data$founding_orgs_binary, na.rm = TRUE),
+#   extracted_country = NA  # Random effects are excluded from fixed-effect predictions
+# )
+# 
+# # Step 2: Predict values for `times_cited`
+# prediction_data$predicted_times_cited <- predict(
+#   model_country_count_1,
+#   newdata = prediction_data,
+#   type = "response"
+# )
+# 
+# # Step 3: Create the combined line graph with journal colors
+# ggplot(prediction_data, aes(x = country_count, y = predicted_times_cited, color = journal)) +
+#   geom_line(size = 1) +  # Line for predicted citations
+#   scale_color_manual(
+#     values = c(
+#       "brain" = "#5e6770",  # Custom color for Brain
+#       "jocn" = "#a8759e",  # Custom color for JoCN
+#       "nature_neuroscience" = "#517d98"  # Custom color for Nature Neuroscience
+#     )
+#   ) +
+#   labs(
+#     title = "Relationship Between Country Count and Times Cited by Journal",
+#     x = "Country Count",
+#     y = "Predicted Times Cited",
+#     color = "Journal"
+#   ) +
+#   theme_minimal() +
+#   theme(
+#     plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+#     axis.text = element_text(size = 10),
+#     axis.title = element_text(size = 12),
+#     legend.position = "bottom"
+#   )
+
+```
+
+# Wrong model (Ignore)
+## Fit model: model 1(multileve mixed): model_country_binary_1
+
+> Since "extracted country" is character, wrong model.
+
+```{r}
+# model_country_binary_1 <- glmmTMB(
+#   times_cited ~ country_binary +
+#     publication_year + author_count + document_type + journal + founding_orgs_binary +
+#    (1 | extracted_country),
+#   family = nbinom2,
+#   data = merged_data
+# )
+# summary(model_country_binary_1)
+
+```
+
+### Visualization for model 1(multileve mixed): model_country_binary_1
+
+```{r}
+# # Load required libraries
+# library(ggplot2)
+# library(dplyr)
+# 
+# # Step 1: Create a new dataset for predictions
+# prediction_data_binary <- merged_data %>%
+#   summarize(
+#     publication_year = mean(publication_year, na.rm = TRUE),
+#     author_count = mean(author_count, na.rm = TRUE),
+#     founding_orgs_binary = 0.5,
+#     document_type = levels(merged_data$document_type)[1],  # Use the first factor level
+#     journal = levels(merged_data$journal)[1],              # Use the first factor level
+#     extracted_country = NA
+#   ) %>%
+#   expand_grid(country_binary = c(0, 1))  # Only 0 and 1 for binary variable
+# 
+# # Step 2: Predict using the model with confidence intervals
+# prediction_results <- predict(
+#   model_country_binary_1,
+#   newdata = prediction_data_binary,
+#   type = "response",
+#   se.fit = TRUE
+# )
+# 
+# # Add predictions and confidence intervals to the dataset
+# prediction_data_binary <- prediction_data_binary %>%
+#   mutate(
+#     predicted_times_cited = prediction_results$fit,
+#     se = prediction_results$se.fit,
+#     lower = predicted_times_cited - 1.96 * se,  # 95% CI lower bound
+#     upper = predicted_times_cited + 1.96 * se   # 95% CI upper bound
+#   )
+# 
+# # Step 3: Bar plot with error bars
+# ggplot(prediction_data_binary, aes(x = as.factor(country_binary), y = predicted_times_cited, fill = as.factor(country_binary))) +
+#   # Bar plot for predicted values
+#   geom_bar(stat = "identity", color = "black", width = 0.6, alpha = 0.8) +
+#   # Error bars for confidence intervals
+#   geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2, color = "black") +
+#   # Customize labels and theme
+#   scale_fill_manual(values = c("#bec7d4", "#a8759e"), name = "Country Type", labels = c("Single Country", "Multiple Countries")) +
+#   scale_x_discrete(labels = c("Single Country", "Multiple Countries")) +  # Update x-axis labels
+#   labs(
+#     title = "Predicted Times Cited by Country Collabrations",
+#     x = "Country Collabrations",
+#     y = "Predicted Times Cited"
+#   ) +
+#   theme_minimal() +
+#   theme(
+#     plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+#     axis.text = element_text(size = 10),
+#     axis.title = element_text(size = 12),
+#     legend.position = "none"
+#   )
+
+```
+
+#### 
+
+```{r}
+# # Load required libraries
+# library(ggplot2)
+# library(dplyr)
+# 
+# # Step 1: Create a prediction dataset
+# prediction_data <- data.frame(
+#   country_binary = c(0, 1),  # Single country and multiple country
+#   publication_year = mean(merged_data$publication_year, na.rm = TRUE),  # Average publication year
+#   author_count = mean(merged_data$author_count, na.rm = TRUE),  # Average author count
+#   document_type = levels(merged_data$document_type)[1],  # Use the first factor level
+#   journal = levels(merged_data$journal)[1],  # Use the first factor level
+#   founding_orgs_binary = mean(merged_data$founding_orgs_binary, na.rm = TRUE),  # Average founding orgs binary
+#   extracted_country = NA  # Random effects are excluded
+# )
+# 
+# # Step 2: Predict values for `times_cited`
+# prediction_data$predicted_times_cited <- predict(
+#   model_country_binary_1,
+#   newdata = prediction_data,
+#   type = "response"
+# )
+# 
+# # Step 3: Create the bar plot
+# ggplot(prediction_data, aes(x = factor(country_binary), y = predicted_times_cited)) +
+#   geom_bar(stat = "identity", fill = "skyblue", color = "black") +
+#   labs(
+#     title = "Predicted Times Cited by Country Binary",
+#     x = "Country Binary (0 = Single Country, 1 = Multiple Countries)",
+#     y = "Predicted Times Cited"
+#   ) +
+#   theme_minimal() +
+#   theme(
+#     plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+#     axis.text = element_text(size = 10),
+#     axis.title = element_text(size = 12)
+#   )
+# 
+# ```
+# 
+# ### everything in one multilevel model
+# 
+# ```{r}
+# model_country_all <- glmmTMB(
+#   times_cited ~ country_binary + country_count + 
+#     publication_year + author_count + document_type + journal + founding_orgs_binary +
+#    (1 | extracted_country),
+#   family = nbinom2,
+#   data = merged_data
+# )
+# summary(model_country_all)
+```
+
+# Wrong Model(Ignore)
+## Fit negative bionmial model(everything_in_one)
+
+> nested model(wrong), ignore
+
+```{r}
+# m_country_all_nb <- MASS::glm.nb(times_cited ~ country_binary + country_count + publication_year + founding_orgs_binary + author_count + journal + document_type, data = merged_data)
+# summary(m_country_all_nb)
+```
+
+### Visualization for negative bionmial model(everything_in_one) -- failed
+
+#### Observed vs. Predicted Values (Including 0-Citation Articles)
+
+```{r}
+# # Add predicted values to the original dataset
+# merged_data$predicted_times_cited <- predict(m_country_all_nb, newdata = merged_data, type = "response")
+# 
+# # Plot observed vs predicted values with jitter
+# ggplot(merged_data, aes(x = predicted_times_cited, y = times_cited)) +
+#   geom_jitter(alpha = 0.5, width = 0.2, height = 0.2) +  # Add jitter for better visibility
+#   scale_y_continuous(trans = "log1p") +  # Use log scale for better visualization of y-axis
+#   labs(
+#     title = "Observed vs Predicted Times Cited (with Jitter)",
+#     x = "Predicted Times Cited",
+#     y = "Observed Times Cited"
+#   ) +
+#   theme_minimal()
+```
+
+#### Distribution of Times Cited
+
+```{r}
+# ggplot(merged_data, aes(x = times_cited)) +
+#   geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+#   scale_x_continuous(trans = "log1p") +  # Log scale to handle skewness
+#   labs(
+#     title = "Distribution of Times Cited (Including 0-Citation Articles)",
+#     x = "Times Cited (log scale)",
+#     y = "Frequency"
+#   ) +
+#   theme_minimal()
+```
+
+# Right model
+##Separated negative bionmial model
+
+### Country_binary only model
+
+```{r}
+m_country_binary_nb <- MASS::glm.nb(times_cited ~ country_binary + publication_year + founding_orgs_binary + author_count + journal + document_type, data = merged_data)
+summary(m_country_binary_nb)
+```
+
+#### Visulization for Country_binary only model
+
+```{r}
+# Step 1: Create a dataset for predictions
+prediction_data_bar <- expand.grid(
+  country_binary = factor(c(0, 1), levels = levels(merged_data$country_binary)),  # Ensure it's a factor
+  publication_year = mean(merged_data$publication_year, na.rm = TRUE),
+  founding_orgs_binary = 0.5,
+  author_count = mean(merged_data$author_count, na.rm = TRUE),
+  journal = factor(levels(merged_data$journal), levels = levels(merged_data$journal)),
+  document_type = factor(levels(merged_data$document_type)[1], levels = levels(merged_data$document_type))
+)
+
+# Step 2: Predict with confidence intervals
+prediction_results <- predict(
+  m_country_binary_nb,
+  newdata = prediction_data_bar,
+  type = "response",
+  se.fit = TRUE
+)
+
+# Add predictions and confidence intervals to the dataset
+prediction_data_bar$predicted_times_cited <- prediction_results$fit
+prediction_data_bar$ci_lower <- prediction_results$fit - 1.96 * prediction_results$se.fit
+prediction_data_bar$ci_upper <- prediction_results$fit + 1.96 * prediction_results$se.fit
+
+prediction_data_bar <- prediction_data_bar |>
+  group_by(country_binary) |>
+  summarize(predicted_times_cited = mean(predicted_times_cited), 
+            ci_lower = mean(ci_lower), ci_upper = mean(ci_upper)) 
+
+# Step 3: Create the bar plot with updated x-axis labels
+ggplot(prediction_data_bar, aes(x = country_binary, y = predicted_times_cited, fill = country_binary)) +
+  # Bar plot for predicted values
+  geom_bar(stat = "identity", color = "black", width = 0.6, alpha = 0.8) +
+  # Error bars for confidence intervals
+  geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), width = 0.2, color = "black") +
+  # Customize colors
+  scale_fill_manual(values = c("#bec7d4", "#a8759e"), name = "Country Binary", labels = c("Single Country", "Multiple Countries")) +
+  # Update x-axis labels
+  scale_x_discrete(labels = c("Single Country", "Multiple Countries")) +
+  # Add labels and theme
+  labs(
+    title = "Predicted Times Cited: Single Country vs. Multiple Countries",
+    x = "Country Collaborations",
+    y = "Predicted Times Cited"
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+    axis.text = element_text(size = 10),
+    axis.title = element_text(size = 12),
+    legend.position = "none"
+  )
+
+```
+
+### Country_count only model
+
+```{r}
+m_country_count_nb <- MASS::glm.nb(times_cited ~ country_count + publication_year + founding_orgs_binary + author_count + journal + document_type, data = merged_data)
+summary(m_country_count_nb)
+```
+
+#### Visulization for Country_count only model
+
+```{r}
+# Step 1: Create a dataset for predictions
+prediction_data_scatter <- expand.grid(
+  country_count = seq(min(merged_data$country_count, na.rm = TRUE), max(merged_data$country_count, na.rm = TRUE), length.out = 100),
+  publication_year = mean(merged_data$publication_year, na.rm = TRUE),
+  founding_orgs_binary = 0.5,
+  author_count = mean(merged_data$author_count, na.rm = TRUE),
+  journal = factor(levels(merged_data$journal), levels = levels(merged_data$journal)),
+  document_type = factor(levels(merged_data$document_type)[1], levels = levels(merged_data$document_type))
+)
+
+# Step 2: Predict values and confidence intervals
+prediction_results <- predict(
+  m_country_count_nb,
+  newdata = prediction_data_scatter,
+  type = "response",
+  se.fit = TRUE
+)
+
+# Add predicted values and confidence intervals to the prediction dataset
+prediction_data_scatter$predicted_times_cited <- prediction_results$fit
+prediction_data_scatter$ci_lower <- prediction_results$fit - 1.96 * prediction_results$se.fit
+prediction_data_scatter$ci_upper <- prediction_results$fit + 1.96 * prediction_results$se.fit
+
+prediction_data_scatter <- prediction_data_scatter |>
+  group_by(country_count) |>
+  summarize(predicted_times_cited = mean(predicted_times_cited), 
+            ci_lower = mean(ci_lower), ci_upper = mean(ci_upper)) 
+
+# Step 3: Create the scatter plot
+
+ggplot() + 
+  # Add the predicted regression line
+  geom_line(
+    data = prediction_data_scatter,
+    aes(x = country_count, y = predicted_times_cited),
+    color = "#5c4f70", size = 1.2
+  ) +
+  # Add confidence interval ribbon
+  geom_ribbon(
+    data = prediction_data_scatter,
+    aes(x = country_count, ymin = ci_lower, ymax = ci_upper),
+    fill = "#5c4f70", alpha = 0.2
+  ) +
+  # Customize labels and theme
+  labs(
+    title = "Effect of Country Count on Times Cited",
+    x = "Country Count",
+    y = "Predicted Times Cited"
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+    axis.text = element_text(size = 10),
+    axis.title = element_text(size = 12)
+  )
+
+```
+
+#### visualization for Country Collaboration and Times Cited by Journal (Grouped)
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+# create country_collaboration_categorical 
+merged_data <- merged_data %>%
+  mutate(
+    country_collaboration_categorical = ifelse(
+      country_count >= 10, 
+      ">= 10", 
+      as.character(country_count)
+    ),
+    country_collaboration_categorical = factor(
+      country_collaboration_categorical,
+      levels = c(as.character(0:9), ">= 10")
+    )
+  )
+
+# find the max y-value，make sure that the height of the bars are the same 
+max_y <- max(merged_data$times_cited, na.rm = TRUE)
+
+# draw the plot
+ggplot(merged_data, aes(x = country_collaboration_categorical, y = times_cited, fill = journal)) +
+  geom_col(position = position_dodge(width = 0.8), width = 0.7) +  # Set bar width and grouping
+  scale_y_continuous(limits = c(0, max_y)) +  # Set consistent y-axis range
+  scale_fill_manual(
+    values = c(
+      "jocn" = "#bec7d4",
+      "brain" = "#a8759e",
+      "nature_neuroscience" = "#5c4f70"
+    )
+  ) +
+  labs(
+    title = "Country Collaboration and Times Cited by Journal (Grouped)",
+    x = "Country Collaboration Count",
+    y = "Times Cited",
+    fill = "Journal"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5),  # center the title 
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+
+```
+
+#### Citations by Country Collaboration Count and Journal（model fitted)
+
+```{r}
+# 1. Create categorical variable for country collaboration
+merged_data <- merged_data %>%
+  mutate(
+    country_collaboration_categorical = ifelse(
+      country_count >= 10, 
+      ">= 10", 
+      as.character(country_count)
+    ),
+    country_collaboration_categorical = factor(
+      country_collaboration_categorical,
+      levels = c(as.character(0:9), ">= 10")
+    )
+  )
+
+# 2. Fit negative binomial model
+m_country_count_nb <- MASS::glm.nb(times_cited ~ country_count + publication_year + 
+                                  founding_orgs_binary + author_count + journal + 
+                                  document_type, data = merged_data)
+
+# 3. Get predictions and calculate means
+summary_data <- merged_data %>%
+  group_by(country_collaboration_categorical, journal) %>%
+  summarize(
+    mean_citations = mean(times_cited, na.rm = TRUE),
+    predicted_citations = mean(predict(m_country_count_nb, 
+                                    newdata = merged_data[merged_data$country_collaboration_categorical == first(country_collaboration_categorical),], 
+                                    type = "response")),
+    .groups = 'drop'
+  )
+
+# 4. Create the plot
+ggplot(summary_data) +
+  geom_col(aes(x = country_collaboration_categorical, 
+               y = mean_citations, 
+               fill = journal),
+           position = position_dodge(width = 0.8),
+           width = 0.7,
+           alpha = 0.7) +
+  scale_fill_manual(
+    values = c(
+      "jocn" = "#bec7d4",
+      "brain" = "#a8759e",
+      "nature_neuroscience" = "#5c4f70"
+    )
+  ) +
+  labs(
+    title = "Citations by Country Collaboration Count and Journal",
+    x = "Number of Collaborating Countries",
+    y = "Mean Times Cited",
+    fill = "Journal"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+```
+
+# Filter for ≥10 collaborations and summarize by journal
+
+```{r}
+# Filter for ≥10 collaborations and summarize by journal
+high_collab_summary <- merged_data %>%
+  filter(country_count >= 10) %>%
+  group_by(journal) %>%
+  summarize(
+    n_articles = n(),
+    mean_year = mean(publication_year),
+    mean_authors = mean(author_count),
+    mean_citations = mean(times_cited),
+    mean_predicted = mean(predicted_citations)
+  )
+
+print("Summary for articles with ≥10 country collaborations:")
+print(high_collab_summary)
+```
+
+```{r}
+# Get model summary
+summary_model <- summary(m_country_count_nb)
+print("\nModel Coefficients:")
+print(summary_model)
+
+# Convert coefficients to incidence rate ratios for easier interpretation
+exp_coef <- exp(coef(m_country_count_nb))
+print("\nIncidence Rate Ratios:")
+print(exp_coef)
+```
+
+```{r}
+# Create comparison for ≥10 collaborations
+comparison_data <- merged_data %>%
+  filter(country_count >= 10) %>%
+  group_by(journal) %>%
+  summarize(
+    actual_mean = mean(times_cited),
+    predicted_mean = mean(predicted_citations),
+    n_papers = n(),
+    ratio = predicted_mean/actual_mean
+  )
+
+print("\nComparison of actual vs predicted citations for ≥10 collaborations:")
+print(comparison_data)
+```
+
+# Case analysis for model_country_count_1
+
+### Residual Diagnostics with DHARMa
+
+```{r}
+# install.packages("DHARMa")
+library(DHARMa)
+
+# Simulate residuals for the model
+sim_res <- simulateResiduals(fittedModel = model_country_count_1)
+
+# Plot residual diagnostics
+plot(sim_res)
+
+# Identify potential outliers
+testOutliers(sim_res)
+
+# Plot residuals against specific predictors (e.g., country_count)
+plotResiduals(sim_res, merged_data$country_count)
+
+
+# Test for uniformity (goodness of fit)
+testUniformity(sim_res)
+
+```
+
+> The QQ plot (Graph 1, the first graph on the left in the first image) compares the simulated residuals to a uniform distribution. The points deviate from the diagonal line. The KS test shows p = 0, which means the model has a significant misfit. The dispersion test shows p = 0.344, which indicates no over-dispersion or under-dispersion. The Residual vs. Predicted plot (Graph 2, the second graph on the right in the first image) shows residuals scattered around predicted values. The scatter is mostly random, but the red crosses at the top suggest potential outliers. The Histogram of Residuals (Graph 3, the only graph in the second image) shows the distribution of residuals. The outlier test shows p = 0, which means there are significant outliers. These outliers are marked by red bars at the edges. The Residuals vs. Predictor plot (Graph 4, the only graph in the third image) shows residuals plotted against country_count. The residuals are mostly centered around zero but show slight skewness for higher country_count. Red crosses highlight influential points in this plot.
+
+### Use Residuals-Based Diagnostics with DHARMa
+
+```{r}
+# Simulate residuals (already done if you've followed earlier steps)
+# sim_res <- simulateResiduals(fittedModel = model_country_count_1)
+
+# Plot residuals vs predictors (specific to influential cases)
+plotResiduals(sim_res, merged_data$country_count)
+
+# Identify potential outliers with residuals exceeding thresholds
+outlier_test <- testOutliers(sim_res)
+print(outlier_test)
+
+
+```
+
+> Residuals vs. Predictor Plot (First Image): This plot shows the residuals plotted against the rank-transformed country_count predictor. The residuals are mostly centered around zero, which is desirable. However, there are red crosses indicating potential outliers and influential points. The slight skewness and patterns, especially for higher country_count values, suggest that the model may not fully capture the relationship between the predictor and the response variable. Histogram of Residuals (Second Image): The histogram displays the frequency distribution of residuals. Most residuals are evenly distributed, which indicates a reasonably good model fit for the majority of the data. However, the red bars at the edges highlight significant outliers identified during the outlier test. These outliers suggest that certain observations deviate considerably from the model's expectations and might strongly influence the model's predictions. These results suggest that while the model fits the majority of the data well, the presence of significant outliers and patterns in residuals requires further investigation.
+
+### Outliers' id
+
+```{r}
+# Extract residuals from the DHARMa object
+residuals <- residuals(sim_res)
+
+# Threshold for identifying outliers
+threshold <- 0.95  # As the red bars in the histogram are near 1 (95% quantile)
+
+# Find the index of residuals exceeding the threshold
+outlier_indices <- which(residuals > threshold)
+
+# Extract the corresponding IDs from the dataset
+outlier_ids <- merged_data$id[outlier_indices]  # Replace 'id' with the column representing unique IDs
+
+# Print the outlier IDs
+print(outlier_ids)
+
+
+
+library(dplyr)  # Load the package
+
+# Filter the dataset for rows matching these IDs
+filtered_data <- merged_data |>
+  filter(id %in% outlier_ids)  # Use 'id' as the column name for filtering
+
+# View the filtered data
+print(filtered_data)
+
+```
+
+### Check Model Fit and Assumptions
+
+```{r}
+# Install and load performance
+# install.packages("performance")
+library(performance)
+
+# Check model diagnostics
+check_model(model_country_count_1)
+
+# Check for multicollinearity
+check_collinearity(model_country_count_1)
+
+r2(model_country_count_1)
+
+check_collinearity(model_country_count_1)
+```
+
+#### Manual Case Analysis
+
+```{r}
+# Extract residuals
+residuals <- residuals(model_country_count_1, type = "pearson")
+
+# Plot residuals
+plot(residuals, main = "Pearson Residuals", xlab = "Observation", ylab = "Residuals")
+
+# Identify large residuals
+which(abs(residuals) > 2)  # Threshold of ±2 for potential outliers
+
+# Extract fitted values
+fitted_values <- predict(model_country_count_1, type = "response")
+
+# Compare observed vs predicted
+plot(fitted_values, merged_data$times_cited, xlab = "Predicted", ylab = "Observed")
+
+```
+
+> The Pearson residuals plot shows that most residuals are clustered around zero, indicating that the model predictions match the observed data for many cases. However, some points have large residuals, exceeding ±10, which suggests poor model performance for these observations. The outliers identified are those with residuals greater than ±2, and they may strongly influence the model fit. These points could represent extreme values or issues with the data or model. The observed vs. predicted plot shows that most points are near the origin, suggesting alignment for lower values, but there is a large vertical spread for higher predicted values. This spread indicates the model struggles to predict accurately for extreme cases, with some observed values or predictions deviating significantly from the expected line.
+
+#### Visualization of Case-Level Diagnostics
+
+```{r}
+# Create a data frame with residuals, fitted values, and observation IDs
+diagnostic_data <- data.frame(
+  obs_id = 1:nrow(merged_data),
+  residuals = residuals(model_country_count_1, type = "pearson"),
+  fitted = predict(model_country_count_1, type = "response"),
+  cooks_dist = cooks_dist
+)
+
+# Plot residuals vs fitted values
+library(ggplot2)
+ggplot(diagnostic_data, aes(x = fitted, y = residuals)) +
+  geom_point(alpha = 0.5) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  labs(title = "Residuals vs Fitted Values", x = "Fitted Values", y = "Pearson Residuals") +
+  theme_minimal()
+
+# Highlight influential points
+ggplot(diagnostic_data, aes(x = obs_id, y = cooks_dist)) +
+  geom_point() +
+  geom_hline(yintercept = threshold, color = "red", linetype = "dashed") +
+  labs(title = "Cook's Distance", x = "Observation ID", y = "Cook's Distance") +
+  theme_minimal()
+
+```
+
+```{r}
+# Create a new variable to see if there's any international collabration
+merged_data$international_collab <- ifelse(merged_data$country_binary == 1, "International", "Single Country")
+
+# group_by journal，calculate the prop for international collaboration articles
+journal_collab_summary <- merged_data |>
+  dplyr::group_by(journal, international_collab) |>
+  dplyr::summarize(count = n(), .groups = "drop") |>
+  dplyr::mutate(prop = count / sum(count))
+
+# 查看结果
+print(journal_collab_summary)
+
+```
+
+```{r}
+# FISHER TEST
+
+fisher_test_workspace <- fisher.test(journal_collab_table, workspace = 2e8)  # 设置较大的工作区
+print(fisher_test_workspace)
+
+## fisher test
+fisher_test_simulated <- fisher.test(journal_collab_table, simulate.p.value = TRUE, B = 10000)  # 
+print(fisher_test_simulated)
+
+# 5. Calulate the prop of international collabration
+journal_collab_summary <- merged_data |>
+  group_by(journal, international_collab) |>
+  summarize(count = n(), .groups = "drop") |>
+  mutate(prop = count / sum(count))
+
+
+print(journal_collab_summary)
+
+```
+
+# Interaction model (country_binar \* journal)
+
+```{r}
+model <- glmmTMB::glmmTMB(
+  times_cited ~ country_binary * journal + publication_year + author_count + 
+  document_type + founding_orgs_binary + (1 | extracted_country),
+  data = merged_data,
+  family = nbinom2(link = "log")
+)
+
+
+summary(model)
+
+```
+
+# Check different journal's international collabration
+
+```{r}
+library(ggplot2)
+
+ggplot(journal_collab_summary, aes(x = journal, y = prop, fill = international_collab)) +
+  geom_bar(stat = "identity", position = "fill") +
+  labs(
+    title = "Proportion of International Collaborations by Journal",
+    x = "Journal",
+    y = "Proportion",
+    fill = "Collaboration Type"
+  ) +
+  theme_minimal()
+
+```
